@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Obsidian Vault Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-dim": "#0b1326",
+                      "tertiary-container": "#ca801e",
+                      "primary-container": "#a078ff",
+                      "surface-tint": "#d0bcff",
+                      "on-tertiary-fixed-variant": "#673d00",
+                      "primary": "#d0bcff",
+                      "primary-fixed-dim": "#d0bcff",
+                      "outline": "#958ea0",
+                      "on-background": "#dae2fd",
+                      "surface-container-high": "#222a3d",
+                      "on-tertiary": "#482900",
+                      "error": "#ffb4ab",
+                      "tertiary": "#ffb869",
+                      "secondary-container": "#3131c0",
+                      "primary-fixed": "#e9ddff",
+                      "on-primary": "#3c0091",
+                      "on-tertiary-fixed": "#2c1700",
+                      "surface-container-lowest": "#060e20",
+                      "surface-container": "#171f33",
+                      "secondary": "#c0c1ff",
+                      "on-error": "#690005",
+                      "secondary-fixed": "#e1e0ff",
+                      "tertiary-fixed": "#ffdcbb",
+                      "on-surface-variant": "#cbc3d7",
+                      "secondary-fixed-dim": "#c0c1ff",
+                      "surface-bright": "#31394d",
+                      "inverse-surface": "#dae2fd",
+                      "surface-container-highest": "#2d3449",
+                      "inverse-on-surface": "#283044",
+                      "on-primary-fixed": "#23005c",
+                      "on-tertiary-container": "#3f2300",
+                      "inverse-primary": "#6d3bd7",
+                      "error-container": "#93000a",
+                      "background": "#0b1326",
+                      "on-secondary-container": "#b0b2ff",
+                      "surface-variant": "#2d3449",
+                      "outline-variant": "#494454",
+                      "on-secondary-fixed-variant": "#2f2ebe",
+                      "surface": "#0b1326",
+                      "on-primary-fixed-variant": "#5516be",
+                      "tertiary-fixed-dim": "#ffb869",
+                      "on-error-container": "#ffdad6",
+                      "on-surface": "#dae2fd",
+                      "on-primary-container": "#340080",
+                      "surface-container-low": "#131b2e",
+                      "on-secondary": "#1000a9",
+                      "on-secondary-fixed": "#07006c"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "lg": "24px",
+                      "sidebar-width": "280px",
+                      "xl": "40px",
+                      "sm": "8px",
+                      "max-content-width": "800px",
+                      "base": "4px",
+                      "md": "16px",
+                      "xs": "4px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Geist"],
+                      "label-md": ["Geist"],
+                      "headline-sm": ["Geist"],
+                      "body-lg": ["Inter"],
+                      "display-lg": ["Geist"],
+                      "mono-code": ["JetBrains Mono"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                      "label-md": ["13px", {"lineHeight": "1", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                      "headline-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                      "mono-code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            vertical-align: middle;
+        }
+        .guide-wire {
+            position: relative;
+        }
+        .guide-wire::before {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: #494454;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #494454;
+            border-radius: 2px;
+        }
+        .markdown-active-line {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .custom-checkbox:checked {
+            background-color: #d0bcff;
+            background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-hidden h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface-dim text-primary flex justify-between items-center h-16 px-md w-full sticky top-0 z-50 border-b border-outline-variant flat no shadows">
+<div class="flex items-center gap-md">
+<span class="font-headline-md text-headline-md font-bold text-primary">Obsidian Vault</span>
+<div class="relative flex items-center md:ml-xl">
+<span class="material-symbols-outlined absolute left-sm text-on-surface-variant pointer-events-none">search</span>
+<input class="bg-surface-container-high border-none rounded-lg pl-xl pr-md py-xs text-label-md font-label-md focus:ring-2 focus:ring-primary/20 w-64 transition-all outline-none" placeholder="Search Vault..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="material-symbols-outlined p-sm rounded-lg hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 text-on-surface-variant">sync</button>
+<button class="material-symbols-outlined p-sm rounded-lg hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 text-on-surface-variant">settings</button>
+<button class="material-symbols-outlined p-sm rounded-lg hover:bg-surface-container-highest transition-colors cursor-pointer active:scale-95 text-on-surface-variant">account_circle</button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar (Left Sidebar) -->
+<aside class="bg-surface-container text-primary flex flex-col h-full py-md px-sm fixed left-0 w-sidebar-width border-r border-outline-variant flat no shadows z-40 hidden md:flex">
+<div class="px-md mb-lg">
+<div class="flex items-center gap-sm mb-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Personal Vault</span>
+</div>
+<div class="text-on-surface-variant font-label-md text-label-md">842 notes</div>
+</div>
+<button class="mx-md mb-lg py-sm px-md bg-primary text-on-primary font-label-md text-label-md rounded-lg hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined">add</span>
+                New Note
+            </button>
+<nav class="flex-1 overflow-y-auto space-y-base px-sm">
+<!-- All Files (Active) -->
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-primary border-l-2 border-primary bg-primary-container/10 hover:bg-surface-container-highest transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="font-label-md text-label-md">All Files</span>
+</div>
+<!-- Recent -->
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+<span class="font-label-md text-label-md">Recent</span>
+</div>
+<!-- Favorites -->
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined" data-icon="star">star</span>
+<span class="font-label-md text-label-md">Favorites</span>
+</div>
+<!-- Tags -->
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined" data-icon="label">label</span>
+<span class="font-label-md text-label-md">Tags</span>
+</div>
+<!-- Trash -->
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span class="font-label-md text-label-md">Trash</span>
+</div>
+<div class="pt-lg pb-sm px-md opacity-50 font-label-md text-label-md uppercase tracking-widest text-on-surface-variant">Folders</div>
+<div class="space-y-base">
+<div class="group flex items-center gap-sm py-xs px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="material-symbols-outlined text-[18px]">folder</span>
+<span class="font-label-md text-label-md">Projects</span>
+</div>
+<div class="group flex items-center gap-sm py-xs px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[16px] transform rotate-90">expand_more</span>
+<span class="material-symbols-outlined text-[18px]">folder</span>
+<span class="font-label-md text-label-md">Zettelkasten</span>
+</div>
+<div class="ml-lg guide-wire space-y-base border-l border-outline-variant/30 pl-xs">
+<div class="flex items-center gap-sm py-xs px-md rounded-lg text-primary bg-primary/5 hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="font-label-md text-label-md">Mental Models</span>
+</div>
+<div class="flex items-center gap-sm py-xs px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="font-label-md text-label-md">Systems Design</span>
+</div>
+</div>
+<div class="group flex items-center gap-sm py-xs px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span class="font-label-md text-label-md">Daily Notes</span>
+</div>
+</div>
+</nav>
+<div class="mt-auto px-sm pt-md border-t border-outline-variant/20">
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-md text-label-md">Help</span>
+</div>
+<div class="flex items-center gap-md py-sm px-md rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined" data-icon="cloud_queue">cloud_queue</span>
+<span class="font-label-md text-label-md">Storage (82%)</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-sidebar-width flex overflow-hidden">
+<!-- File List (Middle) -->
+<section class="w-80 bg-surface-container-low border-r border-outline-variant flex flex-col shrink-0">
+<div class="p-md border-b border-outline-variant bg-surface-container-low/50 flex justify-between items-center">
+<span class="text-label-md font-label-md text-on-surface-variant">MENTAL MODELS</span>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">filter_list</button>
+</div>
+<div class="flex-1 overflow-y-auto">
+<!-- File Card Active -->
+<div class="p-md border-b border-outline-variant bg-surface-container-highest/40 border-l-2 border-l-primary cursor-pointer">
+<div class="flex justify-between mb-xs">
+<h3 class="font-headline-sm text-[14px] text-primary truncate">Obsidian Workflow</h3>
+<span class="text-[10px] text-on-surface-variant/60">2h ago</span>
+</div>
+<p class="text-body-md text-[13px] text-on-surface-variant line-clamp-2">Setting up a second brain requires a balance between strict taxonomies and loose links...</p>
+<div class="mt-sm flex gap-xs">
+<span class="px-xs py-[2px] bg-outline-variant/30 text-on-surface-variant rounded text-[10px]">#pkm</span>
+<span class="px-xs py-[2px] bg-outline-variant/30 text-on-surface-variant rounded text-[10px]">#workflow</span>
+</div>
+</div>
+<!-- File Card -->
+<div class="p-md border-b border-outline-variant hover:bg-surface-container-highest/20 transition-all cursor-pointer group">
+<div class="flex justify-between mb-xs">
+<h3 class="font-headline-sm text-[14px] text-on-surface truncate group-hover:text-primary transition-colors">Digital Minimalism Notes</h3>
+<span class="text-[10px] text-on-surface-variant/60">Oct 12</span>
+</div>
+<p class="text-body-md text-[13px] text-on-surface-variant/70 line-clamp-2">Cal Newport's philosophy on choosing focused tools over multi-purpose distractions...</p>
+</div>
+<!-- File Card -->
+<div class="p-md border-b border-outline-variant hover:bg-surface-container-highest/20 transition-all cursor-pointer">
+<div class="flex justify-between mb-xs">
+<h3 class="font-headline-sm text-[14px] text-on-surface truncate">First Principles Thinking</h3>
+<span class="text-[10px] text-on-surface-variant/60">Oct 10</span>
+</div>
+<p class="text-body-md text-[13px] text-on-surface-variant/70 line-clamp-2">Deconstructing complex problems into fundamental truths and building back up...</p>
+</div>
+<!-- File Card -->
+<div class="p-md border-b border-outline-variant hover:bg-surface-container-highest/20 transition-all cursor-pointer">
+<div class="flex justify-between mb-xs">
+<h3 class="font-headline-sm text-[14px] text-on-surface truncate">Weekly Review - Week 41</h3>
+<span class="text-[10px] text-on-surface-variant/60">Oct 08</span>
+</div>
+<p class="text-body-md text-[13px] text-on-surface-variant/70 line-clamp-2">Accomplishments, blockages, and planning for the upcoming sprint on Vault UI...</p>
+</div>
+</div>
+</section>
+<!-- Editor / Preview (Right) -->
+<section class="flex-1 flex flex-col bg-surface overflow-hidden">
+<!-- Toolbar -->
+<div class="h-14 border-b border-outline-variant px-md flex items-center justify-between shrink-0 bg-surface/80 backdrop-blur-sm z-10">
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">folder_open</span>
+<span class="text-label-md font-label-md">Zettelkasten / Mental Models</span>
+</div>
+<span class="text-outline-variant">/</span>
+<h2 class="text-headline-sm font-headline-sm text-on-surface">Obsidian Workflow.md</h2>
+</div>
+<div class="flex bg-surface-container p-[2px] rounded-lg">
+<button class="px-md py-xs rounded text-label-md font-label-md transition-all bg-primary text-on-primary shadow-sm" id="btn-edit" onclick="toggleMode('edit')">Edit</button>
+<button class="px-md py-xs rounded text-label-md font-label-md transition-all text-on-surface-variant hover:text-on-surface" id="btn-preview" onclick="toggleMode('preview')">Preview</button>
+</div>
+</div>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto overflow-x-hidden relative scroll-smooth">
+<!-- Markdown Editor View -->
+<div class="max-w-[max-content-width] mx-auto px-xl py-xl font-mono-code text-mono-code leading-relaxed text-on-surface-variant min-h-full" id="editor-view">
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">1</span>
+<span class="text-primary font-bold"># Obsidian Workflow</span>
+</div>
+<div class="flex gap-md group mt-xs">
+<span class="w-8 text-right opacity-30 select-none">2</span>
+<span> </span>
+</div>
+<div class="flex gap-md group markdown-active-line">
+<span class="w-8 text-right opacity-50 select-none">3</span>
+<span>Setting up a **second brain** requires a balance between strict taxonomies and loose links. Using the [PARA method](https://fortelabs.com) for organization:</span>
+</div>
+<div class="flex gap-md group mt-xs">
+<span class="w-8 text-right opacity-30 select-none">4</span>
+<span> </span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">5</span>
+<span class="text-tertiary-container">- Projects</span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">6</span>
+<span class="text-tertiary-container">- Areas</span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">7</span>
+<span class="text-tertiary-container">- Resources</span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">8</span>
+<span class="text-tertiary-container">- Archives</span>
+</div>
+<div class="flex gap-md group mt-xs">
+<span class="w-8 text-right opacity-30 select-none">9</span>
+<span> </span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">10</span>
+<span class="text-primary-container">javascript</span>
+</div>
+<div class="flex gap-md group bg-surface-container-lowest/50">
+<span class="w-8 text-right opacity-30 select-none">11</span>
+<span>function <span class="text-primary">vaultSync</span>() {</span>
+</div>
+<div class="flex gap-md group bg-surface-container-lowest/50">
+<span class="w-8 text-right opacity-30 select-none">12</span>
+<span>  const obsidian = <span class="text-secondary">new Vault</span>();</span>
+</div>
+<div class="flex gap-md group bg-surface-container-lowest/50">
+<span class="w-8 text-right opacity-30 select-none">13</span>
+<span>  return obsidian.<span class="text-tertiary">commit</span>();</span>
+</div>
+<div class="flex gap-md group bg-surface-container-lowest/50">
+<span class="w-8 text-right opacity-30 select-none">14</span>
+<span>}</span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">15</span>
+<span class="text-primary-container"></span>
+</div>
+<div class="flex gap-md group mt-xs">
+<span class="w-8 text-right opacity-30 select-none">16</span>
+<span> </span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">17</span>
+<span>- [x] Configure daily note template</span>
+</div>
+<div class="flex gap-md group">
+<span class="w-8 text-right opacity-30 select-none">18</span>
+<span>- [ ] Review backlog for October</span>
+</div>
+<!-- Empty space to show focus -->
+<div class="mt-lg border-l-2 border-primary pl-md animate-pulse">
+<span class="bg-primary/20 w-1 h-5 inline-block align-middle"></span>
+</div>
+</div>
+<!-- Preview View (Hidden by default) -->
+<div class="hidden max-w-[max-content-width] mx-auto px-xl py-xl font-body-lg text-body-lg text-on-surface leading-relaxed min-h-full" id="preview-view">
+<h1 class="font-display-lg text-display-lg mb-lg border-b border-outline-variant pb-md">Obsidian Workflow</h1>
+<p class="mb-md">Setting up a <strong>second brain</strong> requires a balance between strict taxonomies and loose links. Using the <a class="text-primary underline decoration-primary/30 hover:decoration-primary transition-all" href="#">PARA method</a> for organization:</p>
+<ul class="list-disc ml-xl mb-lg space-y-xs text-on-surface-variant">
+<li>Projects</li>
+<li>Areas</li>
+<li>Resources</li>
+<li>Archives</li>
+</ul>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md font-mono-code text-mono-code mb-lg shadow-inner overflow-hidden relative group">
+<div class="absolute top-sm right-sm text-[10px] uppercase text-on-surface-variant/40 group-hover:text-primary transition-colors">javascript</div>
+<pre><span class="text-primary-container">function</span> <span class="text-primary">vaultSync</span>() {
+  <span class="text-primary-container">const</span> obsidian = <span class="text-secondary">new Vault</span>();
+  <span class="text-primary-container">return</span> obsidian.<span class="text-tertiary">commit</span>();
+}</pre>
+</div>
+<div class="space-y-sm mb-lg">
+<div class="flex items-center gap-md">
+<input checked="" class="custom-checkbox h-5 w-5 rounded border-outline-variant bg-transparent text-primary focus:ring-primary/20 transition-all cursor-pointer" type="checkbox"/>
+<span class="line-through opacity-50">Configure daily note template</span>
+</div>
+<div class="flex items-center gap-md">
+<input class="custom-checkbox h-5 w-5 rounded border-outline-variant bg-transparent text-primary focus:ring-primary/20 transition-all cursor-pointer" type="checkbox"/>
+<span>Review backlog for October</span>
+</div>
+</div>
+<div class="relative w-full h-64 rounded-xl overflow-hidden mt-xl border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A cinematic, high-contrast digital art piece showcasing an abstract representation of interconnected nodes and data clusters. The scene is set in a deep obsidian-colored space with glowing purple and soft amber lighting, creating a technical yet sophisticated atmosphere. Sharp, geometric lines and soft depth-of-field blurs emphasize a futuristic organization system. The mood is calm, focused, and intellectually stimulating, reflecting a premium dark-mode productivity environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAh4pI9RGLirrVStfYy0W-lEVmRhfKZFtpG0rEG01Ml6HJOViqu49BOM5sxM8Dl4x5EWHGAJrG1SrO0WSLUWFfsVcjHGPbYd9t3jpCf6pjRdrMqLq4T-FLDvNyG-liB5SU3nzUmXfMvMf6dlg3kRihBLVaTgWhf85YAszdPHj7NxzIT4tkNl5_6CwtruezfAlRq4ixkX9AX8qTaKR9o6gDvONZay6h71XZCtzh57ArxvF0pNvtJU5_okJmh19AWvXyK6_6i1yquyPk"/>
+</div>
+</div>
+</div>
+<!-- Footer Status Bar -->
+<div class="h-8 border-t border-outline-variant px-md flex items-center justify-between bg-surface-container-low shrink-0">
+<div class="flex gap-md text-[11px] text-on-surface-variant/60 font-label-md">
+<span>428 words</span>
+<span>2,140 characters</span>
+</div>
+<div class="flex items-center gap-sm text-[11px] text-on-surface-variant/60 font-label-md">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span>Auto-saving...</span>
+<span class="ml-md">UTF-8</span>
+<span class="material-symbols-outlined text-[14px]">link</span>
+</div>
+</div>
+</section>
+</main></div>
+<!-- Mobile Navigation Shell (Bottom Bar) -->
+<nav class="md:hidden flex justify-around items-center h-16 bg-surface-dim border-t border-outline-variant fixed bottom-0 left-0 right-0 z-50">
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="text-[10px]">Files</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">search</span>
+<span class="text-[10px]">Search</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">add_circle</span>
+<span class="text-[10px]">New</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">star</span>
+<span class="text-[10px]">Favs</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px]">Settings</span>
+</button>
+</nav>
+<script>
+        function toggleMode(mode) {
+            const editorView = document.getElementById('editor-view');
+            const previewView = document.getElementById('preview-view');
+            const btnEdit = document.getElementById('btn-edit');
+            const btnPreview = document.getElementById('btn-preview');
+
+            if (mode === 'edit') {
+                editorView.classList.remove('hidden');
+                previewView.classList.add('hidden');
+                
+                btnEdit.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+                btnEdit.classList.remove('text-on-surface-variant');
+                
+                btnPreview.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+                btnPreview.classList.add('text-on-surface-variant');
+            } else {
+                editorView.classList.add('hidden');
+                previewView.classList.remove('hidden');
+                
+                btnPreview.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+                btnPreview.classList.remove('text-on-surface-variant');
+                
+                btnEdit.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+                btnEdit.classList.add('text-on-surface-variant');
+            }
+        }
+
+        // Initialize drag effect or interactivity for list cards
+        document.querySelectorAll('.border-b').forEach(item => {
+            item.addEventListener('click', function() {
+                if (this.querySelector('h3')) {
+                    // Simple highlight simulation
+                    document.querySelectorAll('.border-l-primary').forEach(el => {
+                        el.classList.remove('border-l-primary', 'bg-surface-container-highest/40');
+                        el.querySelector('h3')?.classList.remove('text-primary');
+                        el.querySelector('h3')?.classList.add('text-on-surface');
+                    });
+                    this.classList.add('border-l-2', 'border-l-primary', 'bg-surface-container-highest/40');
+                    this.querySelector('h3')?.classList.add('text-primary');
+                }
+            });
+        });
+    </script>
+</body></html>
