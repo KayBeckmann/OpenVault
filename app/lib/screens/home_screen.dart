@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import '../services/auth_service.dart';
 import '../widgets/sidebar.dart';
 import 'ssh_keys_screen.dart';
+import 'vault_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -124,12 +125,18 @@ class _StatusCard extends StatelessWidget {
           const SizedBox(height: 8),
           _StatusRow(icon: Icons.check_circle, label: 'Phase 3: SSH-Keys', done: true),
           const SizedBox(height: 8),
-          _StatusRow(icon: Icons.merge_type, label: 'Phase 4: Git Integration', done: false),
+          _StatusRow(icon: Icons.check_circle, label: 'Phase 4: Git Integration', done: true),
           const SizedBox(height: 8),
           _StatusRow(icon: Icons.folder_outlined, label: 'Phase 5: File Browser', done: false),
           const SizedBox(height: 8),
           _StatusRow(icon: Icons.edit_outlined, label: 'Phase 6: Markdown Editor', done: false),
           const SizedBox(height: 24),
+          _NavigationRow(
+            icon: Icons.folder_open,
+            label: 'My Vaults',
+            onTap: (ctx) => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const VaultScreen())),
+          ),
+          const SizedBox(height: 8),
           _NavigationRow(
             icon: Icons.key,
             label: 'Manage SSH Keys',
