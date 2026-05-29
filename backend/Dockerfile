@@ -1,21 +1,35 @@
-# Use latest stable channel SDK.
 FROM dart:stable AS build
 
-# Resolve app dependencies.
 WORKDIR /app
 COPY pubspec.* ./
 RUN dart pub get
 
-# Copy app source code (except anything in .dockerignore) and AOT compile app.
 COPY . .
-RUN dart build cli --target bin/server.dart -o output
+RUN dart compile exe bin/server.dart -o /app/server
 
-# Build minimal serving image from AOT-compiled `/server`
-# and the pre-built AOT-runtime in the `/runtime/` directory of the base image.
-FROM scratch
-COPY --from=build /runtime/ /
-COPY --from=build /app/output/bundle/ /app/
+# Minimal runtime image — Debian bookworm for glibc compatibility
+FROM debian:bookworm-slim
 
-# Start server.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    openssh-client \
+    git \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/server /app/server
+
+RUN useradd -r -s /bin/false openvault && \
+    mkdir -p /data/vaults && \
+    chown -R openvault:openvault /data && \
+    chmod +x /app/server
+
+USER openvault
+WORKDIR /data
+
 EXPOSE 8080
-CMD ["/app/bin/server"]
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD curl -sf http://localhost:8080/health | grep -q '"ok"' || exit 1
+
+CMD ["/app/server"]
