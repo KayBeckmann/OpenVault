@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import 'editor_screen.dart';
+import 'tags_screen.dart';
 
 class FileBrowserScreen extends StatefulWidget {
   const FileBrowserScreen({super.key, required this.vaultId, required this.vaultName});
@@ -129,6 +130,13 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
         backgroundColor: AppColors.surfaceContainerLow,
         actions: [
           IconButton(icon: const Icon(Icons.add), onPressed: () => _createFile(''), tooltip: 'New file'),
+          IconButton(
+            icon: const Icon(Icons.label_outline),
+            tooltip: 'Tags',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => TagsScreen(vaultId: widget.vaultId, vaultName: widget.vaultName),
+            )),
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTree, tooltip: 'Refresh'),
         ],
       ),

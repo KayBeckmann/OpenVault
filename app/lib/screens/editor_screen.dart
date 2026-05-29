@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../widgets/obsidian_preview.dart';
 
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key, required this.vaultId, required this.filePath});
@@ -105,13 +106,14 @@ class _EditorScreenState extends State<EditorScreen> {
           : LayoutBuilder(
               builder: (ctx, constraints) {
                 final isWide = constraints.maxWidth >= 800;
-                return isWide
-                    ? Row(children: [
-                        Expanded(child: _Editor(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
-                        Container(width: 1, color: AppColors.outlineVariant),
-                        Expanded(child: _Preview(content: _ctrl.text)),
-                      ])
-                    : _Editor(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true));
+                if (isWide) {
+                  return Row(children: [
+                    Expanded(child: _Editor(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
+                    Container(width: 1, color: AppColors.outlineVariant),
+                    Expanded(child: _Preview(content: _ctrl.text)),
+                  ]);
+                }
+                return _MobileEditorView(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true));
               },
             ),
     );
@@ -151,6 +153,67 @@ class _Editor extends StatelessWidget {
   }
 }
 
+class _MobileEditorView extends StatefulWidget {
+  const _MobileEditorView({required this.ctrl, required this.onChanged});
+  final TextEditingController ctrl;
+  final VoidCallback onChanged;
+
+  @override
+  State<_MobileEditorView> createState() => _MobileEditorViewState();
+}
+
+class _MobileEditorViewState extends State<_MobileEditorView> {
+  bool _showPreview = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          color: AppColors.surfaceContainerHigh,
+          child: Row(
+            children: [
+              Expanded(child: _Tab(label: 'Edit', active: !_showPreview, onTap: () => setState(() => _showPreview = false))),
+              Expanded(child: _Tab(label: 'Preview', active: _showPreview, onTap: () => setState(() => _showPreview = true))),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _showPreview
+              ? _Preview(content: widget.ctrl.text)
+              : _Editor(ctrl: widget.ctrl, onChanged: widget.onChanged),
+        ),
+      ],
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  const _Tab({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: active
+            ? const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 2)))
+            : null,
+        child: Center(
+          child: Text(label, style: GoogleFonts.spaceGrotesk(
+            fontSize: 13, fontWeight: FontWeight.w500,
+            color: active ? AppColors.primary : AppColors.outline,
+          )),
+        ),
+      ),
+    );
+  }
+}
+
 class _Preview extends StatelessWidget {
   const _Preview({required this.content});
   final String content;
@@ -161,61 +224,8 @@ class _Preview extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 800),
-        child: _MarkdownPreview(content: content),
+        child: ObsidianPreview(content: content),
       ),
-    );
-  }
-}
-
-// Minimal Markdown preview — Phase 6 adds full Obsidian-compatible parsing
-class _MarkdownPreview extends StatelessWidget {
-  const _MarkdownPreview({required this.content});
-  final String content;
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = content.split('\n');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: lines.map((line) => _renderLine(line)).toList(),
-    );
-  }
-
-  Widget _renderLine(String line) {
-    if (line.startsWith('# ')) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 8),
-        child: Text(line.substring(2),
-            style: GoogleFonts.spaceGrotesk(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-      );
-    }
-    if (line.startsWith('## ')) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 4),
-        child: Text(line.substring(3),
-            style: GoogleFonts.spaceGrotesk(fontSize: 22, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-      );
-    }
-    if (line.startsWith('### ')) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 4),
-        child: Text(line.substring(4),
-            style: GoogleFonts.spaceGrotesk(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-      );
-    }
-    if (line.startsWith('- ') || line.startsWith('* ')) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('• ', style: GoogleFonts.inter(color: AppColors.primary)),
-          Expanded(child: Text(line.substring(2), style: GoogleFonts.inter(fontSize: 15, height: 1.6, color: AppColors.onSurface))),
-        ]),
-      );
-    }
-    if (line.trim().isEmpty) return const SizedBox(height: 8);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(line, style: GoogleFonts.inter(fontSize: 15, height: 1.6, color: AppColors.onSurface)),
     );
   }
 }

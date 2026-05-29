@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../db/database.dart';
 import '../models/user.dart';
 import 'crypto_service.dart';
+import 'session_key_cache.dart';
+import 'vault_crypto_service.dart';
 
 const _uuid = Uuid();
 
@@ -43,7 +45,8 @@ class AuthService {
       updatedAt: now,
     );
 
-    final token = _issueToken(user.id);
+    final (token, sessionId) = _issueToken(user.id);
+    _cacheVaultKey(sessionId, password, encryptionSalt);
     return {'user': user.toPublicJson(), 'token': token};
   }
 
@@ -59,15 +62,18 @@ class AuthService {
       throw AuthException('Invalid credentials', 401);
     }
 
-    final token = _issueToken(user.id);
+    final (token, sessionId) = _issueToken(user.id);
+    _cacheVaultKey(sessionId, password, user.encryptionSalt);
     return {'user': user.toPublicJson(), 'token': token};
   }
 
   void logout(String sessionId) {
     db.execute('UPDATE sessions SET revoked = 1 WHERE id = ?', [sessionId]);
+    SessionKeyCache.instance.revoke(sessionId);
   }
 
-  User? getUserFromToken(String token) {
+  // Returns (user, sessionId) — sessionId needed to look up vault key cache
+  (User, String)? getUserAndSessionFromToken(String token) {
     try {
       final jwt = JWT.verify(token, SecretKey(_jwtSecret));
       final payload = jwt.payload as Map<String, dynamic>;
@@ -84,13 +90,15 @@ class AuthService {
       final userRows = db.select('SELECT * FROM users WHERE id = ?', [userId]);
       if (userRows.isEmpty) return null;
 
-      return User.fromRow(userRows.first);
+      return (User.fromRow(userRows.first), sessionId);
     } catch (_) {
       return null;
     }
   }
 
-  String _issueToken(String userId) {
+  User? getUserFromToken(String token) => getUserAndSessionFromToken(token)?.$1;
+
+  (String token, String sessionId) _issueToken(String userId) {
     final sessionId = _uuid.v4();
     final now = DateTime.now().toUtc();
     final expires = now.add(_tokenTtl);
@@ -101,7 +109,14 @@ class AuthService {
     );
 
     final jwt = JWT({'sub': userId}, jwtId: sessionId);
-    return jwt.sign(SecretKey(_jwtSecret), expiresIn: _tokenTtl);
+    final token = jwt.sign(SecretKey(_jwtSecret), expiresIn: _tokenTtl);
+    return (token, sessionId);
+  }
+
+  void _cacheVaultKey(String sessionId, String password, String encryptionSalt) {
+    if (Platform.environment['ENCRYPT_VAULTS'] != '1') return;
+    final key = deriveKey(password, encryptionSalt);
+    SessionKeyCache.instance.store(sessionId, key);
   }
 
   void _validateEmail(String email) {
