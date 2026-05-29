@@ -61,6 +61,34 @@ class ApiClient {
     return decoded;
   }
 
+  Future<String> getRaw(String path) async {
+    final resp = await http.get(
+      Uri.parse('$_base$path'),
+      headers: {
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    );
+    if (resp.statusCode >= 400) throw ApiException('Error ${resp.statusCode}', resp.statusCode);
+    return resp.body;
+  }
+
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) async {
+    final resp = await http.put(
+      Uri.parse('$_base$path'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode(body),
+    );
+    if (resp.body.isEmpty) return {};
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode >= 400) {
+      throw ApiException(decoded['error'] as String? ?? 'Unknown error', resp.statusCode);
+    }
+    return decoded;
+  }
+
   Future<List<Map<String, dynamic>>> getList(String path) async {
     final resp = await http.get(
       Uri.parse('$_base$path'),

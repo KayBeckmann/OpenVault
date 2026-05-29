@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import 'file_browser_screen.dart';
 
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
@@ -289,6 +290,23 @@ class _VaultCard extends StatelessWidget {
                 icon: const Icon(Icons.upload, size: 14),
                 label: const Text('Commit & Push'),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => FileBrowserScreen(
+                    vaultId: vault['id'] as String,
+                    vaultName: vault['name'] as String? ?? 'Vault',
+                  )),
+                ),
+                icon: const Icon(Icons.folder_open, size: 14),
+                label: const Text('Open'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.secondaryContainer,
+                  foregroundColor: AppColors.onSecondaryContainer,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
               ),
             ],
           ),

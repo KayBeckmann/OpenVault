@@ -127,9 +127,9 @@ class _StatusCard extends StatelessWidget {
           const SizedBox(height: 8),
           _StatusRow(icon: Icons.check_circle, label: 'Phase 4: Git Integration', done: true),
           const SizedBox(height: 8),
-          _StatusRow(icon: Icons.folder_outlined, label: 'Phase 5: File Browser', done: false),
+          _StatusRow(icon: Icons.check_circle, label: 'Phase 5: File Browser', done: true),
           const SizedBox(height: 8),
-          _StatusRow(icon: Icons.edit_outlined, label: 'Phase 6: Markdown Editor', done: false),
+          _StatusRow(icon: Icons.check_circle, label: 'Phase 6: Markdown Editor (basic)', done: true),
           const SizedBox(height: 24),
           _NavigationRow(
             icon: Icons.folder_open,
