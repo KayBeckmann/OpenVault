@@ -6,6 +6,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
 import 'package:backend/routes/auth_routes.dart';
 import 'package:backend/routes/health_routes.dart';
+import 'package:backend/routes/ssh_key_routes.dart';
 import 'package:backend/middleware/auth_middleware.dart';
 
 void main(List<String> args) async {
@@ -29,11 +30,13 @@ void main(List<String> args) async {
 
 Router _protectedRouter() {
   final router = Router();
-  router.get('/status', (Request req) async {
-    return Response.ok(
-      jsonEncode({'status': 'authenticated'}),
-      headers: {'content-type': 'application/json'},
-    );
-  });
+
+  router.get('/status', (Request req) async => Response.ok(
+    jsonEncode({'status': 'authenticated'}),
+    headers: {'content-type': 'application/json'},
+  ));
+
+  router.mount('/ssh-keys/', sshKeyRouter().call);
+
   return router;
 }

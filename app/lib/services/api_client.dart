@@ -32,6 +32,21 @@ class ApiClient {
     return decoded;
   }
 
+  Future<Map<String, dynamic>> delete(String path) async {
+    final resp = await http.delete(
+      Uri.parse('$_base$path'),
+      headers: {
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    );
+    if (resp.body.isEmpty) return {};
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode >= 400) {
+      throw ApiException(decoded['error'] as String? ?? 'Unknown error', resp.statusCode);
+    }
+    return decoded;
+  }
+
   Future<Map<String, dynamic>> get(String path) async {
     final resp = await http.get(
       Uri.parse('$_base$path'),
@@ -44,6 +59,21 @@ class ApiClient {
       throw ApiException(decoded['error'] as String? ?? 'Unknown error', resp.statusCode);
     }
     return decoded;
+  }
+
+  Future<List<Map<String, dynamic>>> getList(String path) async {
+    final resp = await http.get(
+      Uri.parse('$_base$path'),
+      headers: {
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
+    );
+    if (resp.statusCode >= 400) {
+      final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+      throw ApiException(decoded['error'] as String? ?? 'Unknown error', resp.statusCode);
+    }
+    final list = jsonDecode(resp.body) as List;
+    return list.cast<Map<String, dynamic>>();
   }
 }
 
