@@ -59,10 +59,17 @@ void _migrate(Database d) {
       name TEXT NOT NULL,
       remote_url TEXT NOT NULL,
       clone_path TEXT NOT NULL,
+      ssh_key_id TEXT REFERENCES ssh_keys(id) ON DELETE SET NULL,
       last_synced_at TEXT,
       created_at TEXT NOT NULL
     )
   ''');
+  // Migration: add ssh_key_id column if missing (for existing databases)
+  try {
+    d.execute('ALTER TABLE vaults ADD COLUMN ssh_key_id TEXT REFERENCES ssh_keys(id) ON DELETE SET NULL');
+  } catch (_) {
+    // Column already exists — ignore
+  }
 
   d.execute('''
     CREATE TABLE IF NOT EXISTS ssh_keys (

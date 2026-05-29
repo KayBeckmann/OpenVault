@@ -36,10 +36,14 @@ class _VaultScreenState extends State<VaultScreen> {
     }
   }
 
-  Future<void> _cloneVault(String name, String remoteUrl) async {
+  Future<void> _cloneVault(String name, String remoteUrl, {String? sshKeyId}) async {
     setState(() { _working = true; _error = null; _statusMessage = 'Cloning repository…'; });
     try {
-      await ApiClient().post('/api/vaults/clone', {'name': name, 'remoteUrl': remoteUrl});
+      await ApiClient().post('/api/vaults/clone', {
+        'name': name,
+        'remoteUrl': remoteUrl,
+        if (sshKeyId != null) 'sshKeyId': sshKeyId,
+      });
       setState(() { _statusMessage = 'Clone successful!'; });
       await _loadVaults();
     } on ApiException catch (e) {
@@ -88,34 +92,9 @@ class _VaultScreenState extends State<VaultScreen> {
   }
 
   void _showCloneDialog() {
-    final nameCtrl = TextEditingController();
-    final urlCtrl = TextEditingController();
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        title: Text('Clone Vault', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Vault name'), autofocus: true),
-            const SizedBox(height: 16),
-            TextField(controller: urlCtrl, decoration: const InputDecoration(labelText: 'Git remote URL (HTTPS or SSH)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (nameCtrl.text.trim().isNotEmpty && urlCtrl.text.trim().isNotEmpty) {
-                Navigator.pop(ctx);
-                _cloneVault(nameCtrl.text.trim(), urlCtrl.text.trim());
-              }
-            },
-            child: const Text('Clone'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _CloneDialog(onClone: _cloneVault),
     );
   }
 
@@ -312,6 +291,145 @@ class _VaultCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CloneDialog extends StatefulWidget {
+  const _CloneDialog({required this.onClone});
+  final void Function(String name, String url, {String? sshKeyId}) onClone;
+
+  @override
+  State<_CloneDialog> createState() => _CloneDialogState();
+}
+
+class _CloneDialogState extends State<_CloneDialog> {
+  final _nameCtrl = TextEditingController();
+  final _urlCtrl = TextEditingController();
+  List<Map<String, dynamic>> _keys = [];
+  String? _selectedKeyId;
+  bool _loadingKeys = true;
+  bool _isSsh = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlCtrl.addListener(_onUrlChanged);
+    _loadKeys();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onUrlChanged() {
+    final isSsh = _urlCtrl.text.startsWith('git@') || _urlCtrl.text.startsWith('ssh://');
+    if (isSsh != _isSsh) setState(() => _isSsh = isSsh);
+  }
+
+  Future<void> _loadKeys() async {
+    try {
+      final keys = await ApiClient().getList('/api/ssh-keys/');
+      if (mounted) setState(() { _keys = keys; _loadingKeys = false; });
+    } catch (_) {
+      if (mounted) setState(() { _loadingKeys = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surfaceContainerLow,
+      title: Text('Clone Vault', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Vault name'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _urlCtrl,
+              decoration: InputDecoration(
+                labelText: 'Git remote URL',
+                hintText: _isSsh ? 'git@github.com:user/repo.git' : 'https://github.com/user/repo.git',
+                helperText: _isSsh ? 'SSH — select a key below' : 'HTTPS — no key needed for public repos',
+                helperStyle: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: _isSsh ? AppColors.primary : AppColors.outline,
+                ),
+              ),
+            ),
+            if (_isSsh) ...[
+              const SizedBox(height: 16),
+              Text(
+                'SSH Key',
+                style: GoogleFonts.spaceGrotesk(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 8),
+              if (_loadingKeys)
+                const Center(child: SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+              else if (_keys.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.errorContainer.withAlpha(60),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.error.withAlpha(80)),
+                  ),
+                  child: Text(
+                    'No SSH keys found. Generate one under "Manage SSH Keys" first.',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.error),
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedKeyId,
+                  hint: Text('Select SSH key', style: GoogleFonts.inter(fontSize: 13, color: AppColors.outline)),
+                  dropdownColor: AppColors.surfaceContainerHigh,
+                  decoration: const InputDecoration(isDense: true),
+                  items: _keys.map((k) => DropdownMenuItem<String>(
+                    value: k['id'] as String,
+                    child: Text(
+                      k['label'] as String? ?? k['id'] as String,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface),
+                    ),
+                  )).toList(),
+                  onChanged: (v) => setState(() => _selectedKeyId = v),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: _canSubmit() ? _submit : null,
+          child: const Text('Clone'),
+        ),
+      ],
+    );
+  }
+
+  bool _canSubmit() {
+    if (_nameCtrl.text.trim().isEmpty || _urlCtrl.text.trim().isEmpty) return false;
+    if (_isSsh && _keys.isNotEmpty && _selectedKeyId == null) return false;
+    return true;
+  }
+
+  void _submit() {
+    Navigator.pop(context);
+    widget.onClone(
+      _nameCtrl.text.trim(),
+      _urlCtrl.text.trim(),
+      sshKeyId: _isSsh ? _selectedKeyId : null,
     );
   }
 }

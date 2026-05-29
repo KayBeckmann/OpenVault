@@ -4,6 +4,7 @@ class Vault {
   final String name;
   final String remoteUrl;
   final String clonePath;
+  final String? sshKeyId;
   final String? lastSyncedAt;
   final String createdAt;
 
@@ -13,6 +14,7 @@ class Vault {
     required this.name,
     required this.remoteUrl,
     required this.clonePath,
+    this.sshKeyId,
     this.lastSyncedAt,
     required this.createdAt,
   });
@@ -23,6 +25,7 @@ class Vault {
         name: row['name'] as String,
         remoteUrl: row['remote_url'] as String,
         clonePath: row['clone_path'] as String,
+        sshKeyId: row['ssh_key_id'] as String?,
         lastSyncedAt: row['last_synced_at'] as String?,
         createdAt: row['created_at'] as String,
       );
@@ -31,6 +34,7 @@ class Vault {
         'id': id,
         'name': name,
         'remoteUrl': remoteUrl,
+        'sshKeyId': sshKeyId,
         'lastSyncedAt': lastSyncedAt,
         'createdAt': createdAt,
       };
