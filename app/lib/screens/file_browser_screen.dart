@@ -33,8 +33,18 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTree();
     _loadSettings();
+    _pullAndLoad();
+  }
+
+  Future<void> _pullAndLoad() async {
+    // Silently pull latest changes on open, then load the tree
+    try {
+      await ApiClient().post('/api/vaults/${widget.vaultId}/pull', {});
+    } catch (_) {
+      // Pull errors are non-fatal (e.g. offline, no remote) — just load the local tree
+    }
+    await _loadTree();
   }
 
   Future<void> _loadSettings() async {
