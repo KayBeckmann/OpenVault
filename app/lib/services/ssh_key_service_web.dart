@@ -10,4 +10,5 @@ class SshKeyService {
   static Future<SshKeyInfo> generateKey() async =>
       throw UnsupportedError('SSH key management not available on web');
   static Future<String> defaultVaultPath() async => '';
+  static Future<String> browseRoot() async => '';
 }
