@@ -296,29 +296,81 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   }
 
   void _resolveAndOpenWikilink(String target) {
-    // target = wikilink text without [[ ]], e.g. "Dateiname" or "Ordner/Datei"
-    final path = _findFileByName(_tree, target);
-    if (path != null) {
-      _openFile(path);
-    }
+    final path = _resolveWikilink(target, _activeFilePath);
+    if (path != null) { _openFile(path); }
   }
 
-  String? _findFileByName(List nodes, String target) {
+  // Resolve a wikilink target to a vault-relative file path.
+  //
+  // Rules (Obsidian-compatible):
+  //  1. If the target contains '/' it is treated as a path — match the
+  //     file whose path ends with that suffix (case-insensitive, .md optional).
+  //  2. Otherwise collect every file whose stem (filename without .md) matches
+  //     the target.  If exactly one match exists, return it.  If several exist,
+  //     return the one whose directory is closest to [currentFilePath].
+  String? _resolveWikilink(String target, String? currentFilePath) {
     final t = target.toLowerCase().replaceAll('.md', '');
+
+    if (t.contains('/')) {
+      // Path-based link — find a file whose path ends with the given suffix.
+      final all = _collectAllFiles(_tree);
+      for (final p in all) {
+        final norm = p.toLowerCase().replaceAll('.md', '');
+        if (norm == t || norm.endsWith('/$t')) return p;
+      }
+      return null;
+    }
+
+    // Bare filename — collect all matches, then pick the closest.
+    final matches = _collectAllFiles(_tree).where((p) {
+      final stem = p.split('/').last.toLowerCase().replaceAll('.md', '');
+      return stem == t;
+    }).toList();
+
+    if (matches.isEmpty) return null;
+    if (matches.length == 1) return matches.first;
+
+    // Multiple matches — prefer the file whose directory is closest to the
+    // directory of the currently open file.
+    final currentDir = currentFilePath != null && currentFilePath.contains('/')
+        ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/'))
+        : '';
+
+    matches.sort((a, b) {
+      final aDir = a.contains('/') ? a.substring(0, a.lastIndexOf('/')) : '';
+      final bDir = b.contains('/') ? b.substring(0, b.lastIndexOf('/')) : '';
+      return _proximity(bDir, currentDir).compareTo(_proximity(aDir, currentDir));
+    });
+
+    return matches.first;
+  }
+
+  // Returns a closeness score: higher = closer to [base].
+  static int _proximity(String candidate, String base) {
+    if (candidate == base) return 1000;
+    if (base.startsWith('$candidate/')) return 500; // candidate is ancestor
+    if (candidate.startsWith('$base/')) return 400; // candidate is descendant
+    // Count shared leading path segments.
+    final bp = base.split('/');
+    final cp = candidate.split('/');
+    var shared = 0;
+    for (var i = 0; i < bp.length && i < cp.length; i++) {
+      if (bp[i] == cp[i]) shared++;
+      else break;
+    }
+    return shared;
+  }
+
+  List<String> _collectAllFiles(List nodes) {
+    final result = <String>[];
     for (final n in nodes) {
       if (n['type'] == 'file') {
-        final path = n['path'] as String;
-        final name = path.split('/').last.replaceAll('.md', '').toLowerCase();
-        // Match by filename OR by full relative path
-        if (name == t || path.toLowerCase().replaceAll('.md', '') == t) {
-          return path;
-        }
+        result.add(n['path'] as String);
       } else if (n['type'] == 'folder') {
-        final r = _findFileByName(n['children'] as List? ?? [], target);
-        if (r != null) return r;
+        result.addAll(_collectAllFiles(n['children'] as List? ?? []));
       }
     }
-    return null;
+    return result;
   }
 
   @override

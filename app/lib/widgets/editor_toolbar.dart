@@ -433,10 +433,24 @@ class _WikilinkDialogState extends State<_WikilinkDialog> {
   }
 
   String _toWikilink(String path) {
-    // Strip .md extension and path separators for clean Wikilink
     final name = path.split('/').last;
-    final display = name.endsWith('.md') ? name.substring(0, name.length - 3) : name;
-    return '[[$display]]';
+    final stem = name.endsWith('.md') ? name.substring(0, name.length - 3) : name;
+
+    // Count how many files share the same stem (case-insensitive)
+    final lowerStem = stem.toLowerCase();
+    final duplicates = _allFiles.where((f) {
+      final n = f.split('/').last;
+      final s = n.endsWith('.md') ? n.substring(0, n.length - 3) : n;
+      return s.toLowerCase() == lowerStem;
+    }).length;
+
+    if (duplicates <= 1) {
+      // Unique filename — bare link is unambiguous
+      return '[[$stem]]';
+    }
+    // Ambiguous — include full relative path so resolution is deterministic
+    final pathStem = path.endsWith('.md') ? path.substring(0, path.length - 3) : path;
+    return '[[$pathStem]]';
   }
 
   @override
