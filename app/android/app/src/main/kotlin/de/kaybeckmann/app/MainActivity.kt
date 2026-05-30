@@ -61,8 +61,10 @@ class MainActivity : FlutterActivity() {
             try {
                 val out = block()
                 mainHandler.post { result.success(out) }
-            } catch (e: Exception) {
-                mainHandler.post { result.error("GIT_ERROR", e.message ?: "Unknown error", null) }
+            } catch (t: Throwable) {
+                // Catch Throwable (not just Exception) to also handle NoClassDefFoundError
+                // and other JVM errors that can occur if R8 strips dynamically loaded classes.
+                mainHandler.post { result.error("GIT_ERROR", t.message ?: t.javaClass.simpleName, null) }
             }
         }
     }
@@ -107,7 +109,10 @@ class MainActivity : FlutterActivity() {
     private fun gitClone(url: String, destPath: String, sshKeyPath: String?): Map<String, Any> {
         val dest = File(destPath).also { it.mkdirs() }
         return try {
-            val cmd = Git.cloneRepository().setURI(url).setDirectory(dest)
+            val cmd = Git.cloneRepository()
+                .setURI(url)
+                .setDirectory(dest)
+                .setTimeout(30)
             buildTransportCallback(sshKeyPath)?.let { cb -> cmd.setTransportConfigCallback(cb) }
             cmd.call().close()
             mapOf("success" to true, "output" to "Clone erfolgreich nach $destPath")
@@ -119,7 +124,7 @@ class MainActivity : FlutterActivity() {
     private fun gitPull(repoPath: String, sshKeyPath: String?): Map<String, Any> {
         return try {
             Git.open(File(repoPath)).use { git ->
-                val cmd = git.pull()
+                val cmd = git.pull().setTimeout(30)
                 buildTransportCallback(sshKeyPath)?.let { cb -> cmd.setTransportConfigCallback(cb) }
                 val res = cmd.call()
                 mapOf(
@@ -140,7 +145,7 @@ class MainActivity : FlutterActivity() {
                 if (!git.status().call().isClean) {
                     git.commit().setMessage(message).call()
                 }
-                val pushCmd = git.push()
+                val pushCmd = git.push().setTimeout(30)
                 buildTransportCallback(sshKeyPath)?.let { cb -> pushCmd.setTransportConfigCallback(cb) }
                 val pushOk = pushCmd.call().all { r ->
                     r.remoteUpdates.all { u ->

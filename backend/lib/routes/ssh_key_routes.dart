@@ -30,6 +30,8 @@ Router sshKeyRouter() {
       return _json(key, 201);
     } on SshKeyException catch (e) {
       return _json({'error': e.message}, e.statusCode);
+    } catch (e) {
+      return _json({'error': 'Key generation failed: $e'}, 500);
     }
   });
 
