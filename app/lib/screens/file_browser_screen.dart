@@ -25,6 +25,8 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   bool _sidebarOpen = true;
   String? _activeFilePath;
   final _searchCtrl = TextEditingController();
+  int _treeGeneration = 0;
+  bool _treeDefaultExpanded = true;
 
   @override
   void initState() {
@@ -165,10 +167,14 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               searchResults: _searchResults,
               searchCtrl: _searchCtrl,
               activeFilePath: _activeFilePath,
+              treeGeneration: _treeGeneration,
+              treeDefaultExpanded: _treeDefaultExpanded,
               onSearch: (q) { setState(() => _searchQuery = q); _search(q); },
               onOpen: _openFile,
               onDelete: _deleteFile,
               onCreate: _createFile,
+              onCollapseAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = false; }),
+              onExpandAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = true; }),
             );
           }
 
@@ -188,10 +194,14 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                         searchResults: _searchResults,
                         searchCtrl: _searchCtrl,
                         activeFilePath: _activeFilePath,
+                        treeGeneration: _treeGeneration,
+                        treeDefaultExpanded: _treeDefaultExpanded,
                         onSearch: (q) { setState(() => _searchQuery = q); _search(q); },
                         onOpen: _openFile,
                         onDelete: _deleteFile,
                         onCreate: _createFile,
+                        onCollapseAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = false; }),
+                        onExpandAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = true; }),
                       )
                     : const SizedBox.shrink(),
               ),
@@ -281,13 +291,6 @@ class _EditorWrapperState extends State<_EditorWrapper> {
     }
   }
 
-  void _cycleMode() => setState(() {
-    _mode = switch (_mode) {
-      EditorMode.split   => EditorMode.edit,
-      EditorMode.edit    => EditorMode.preview,
-      EditorMode.preview => EditorMode.split,
-    };
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -324,19 +327,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                   width: 6, height: 6, margin: const EdgeInsets.only(right: 8),
                   decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
                 ),
-              TextButton.icon(
-                onPressed: _cycleMode,
-                icon: Icon(_modeIcon(_mode), size: 14, color: AppColors.primary),
-                label: Text(
-                  switch (_mode) {
-                    EditorMode.split   => 'Split',
-                    EditorMode.edit    => 'Bearbeiten',
-                    EditorMode.preview => 'Lesen',
-                  },
-                  style: GoogleFonts.spaceGrotesk(fontSize: 11, color: AppColors.primary),
-                ),
-                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-              ),
+              _ModeButtons(current: _mode, onSelect: (m) => setState(() => _mode = m)),
               if (_mode != EditorMode.preview)
                 IconButton(
                   icon: _saving
@@ -375,11 +366,86 @@ class _EditorWrapperState extends State<_EditorWrapper> {
     );
   }
 
-  IconData _modeIcon(EditorMode m) => switch (m) {
-    EditorMode.split   => Icons.view_column_outlined,
-    EditorMode.edit    => Icons.edit_outlined,
-    EditorMode.preview => Icons.chrome_reader_mode_outlined,
-  };
+}
+
+// ── Mode buttons (all three always visible) ───────────────────────────────────
+
+class _ModeButtons extends StatelessWidget {
+  const _ModeButtons({required this.current, required this.onSelect});
+  final EditorMode current;
+  final void Function(EditorMode) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ModeBtn(
+          icon: Icons.view_column_outlined,
+          label: 'Split',
+          active: current == EditorMode.split,
+          onTap: () => onSelect(EditorMode.split),
+        ),
+        _ModeBtn(
+          icon: Icons.edit_outlined,
+          label: 'Bearbeiten',
+          active: current == EditorMode.edit,
+          onTap: () => onSelect(EditorMode.edit),
+        ),
+        _ModeBtn(
+          icon: Icons.chrome_reader_mode_outlined,
+          label: 'Lesen',
+          active: current == EditorMode.preview,
+          onTap: () => onSelect(EditorMode.preview),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModeBtn extends StatelessWidget {
+  const _ModeBtn({required this.icon, required this.label, required this.active, required this.onTap});
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: active
+              ? BoxDecoration(
+                  color: AppColors.primary.withAlpha(30),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppColors.primary.withAlpha(80)),
+                )
+              : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: active ? AppColors.primary : AppColors.outline),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10,
+                  color: active ? AppColors.primary : AppColors.outline,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EditPane extends StatelessWidget {
@@ -461,8 +527,9 @@ class _SidebarContent extends StatelessWidget {
   const _SidebarContent({
     required this.loading, required this.error, required this.tree,
     required this.searchQuery, required this.searchResults, required this.searchCtrl,
-    required this.activeFilePath, required this.onSearch, required this.onOpen,
-    required this.onDelete, required this.onCreate,
+    required this.activeFilePath, required this.treeGeneration, required this.treeDefaultExpanded,
+    required this.onSearch, required this.onOpen, required this.onDelete, required this.onCreate,
+    required this.onCollapseAll, required this.onExpandAll,
   });
 
   final bool loading;
@@ -472,10 +539,14 @@ class _SidebarContent extends StatelessWidget {
   final List<Map<String, dynamic>> searchResults;
   final TextEditingController searchCtrl;
   final String? activeFilePath;
+  final int treeGeneration;
+  final bool treeDefaultExpanded;
   final void Function(String) onSearch;
   final void Function(String) onOpen;
   final Future<void> Function(String) onDelete;
   final Future<void> Function(String) onCreate;
+  final VoidCallback onCollapseAll;
+  final VoidCallback onExpandAll;
 
   @override
   Widget build(BuildContext context) {
@@ -484,6 +555,32 @@ class _SidebarContent extends StatelessWidget {
       child: Column(
         children: [
           _SearchBar(controller: searchCtrl, onSearch: onSearch),
+          // Collapse / expand toolbar (only when tree is visible)
+          if (!loading && error == null && searchQuery.isEmpty && tree.isNotEmpty)
+            Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: AppColors.outlineVariant)),
+              ),
+              child: Row(
+                children: [
+                  Text('Ordner', style: GoogleFonts.inter(fontSize: 11, color: AppColors.outline)),
+                  const Spacer(),
+                  _TreeToolButton(
+                    icon: Icons.unfold_less,
+                    tooltip: 'Alle einklappen',
+                    onTap: onCollapseAll,
+                  ),
+                  const SizedBox(width: 4),
+                  _TreeToolButton(
+                    icon: Icons.unfold_more,
+                    tooltip: 'Alle ausklappen',
+                    onTap: onExpandAll,
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: loading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -497,12 +594,36 @@ class _SidebarContent extends StatelessWidget {
                         : tree.isEmpty
                             ? _EmptyVaultHint(onCreate: () => onCreate(''))
                             : _FileTree(
+                                key: ValueKey(treeGeneration),
                                 nodes: tree,
+                                defaultExpanded: treeDefaultExpanded,
                                 activeFilePath: activeFilePath,
                                 onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
                               ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TreeToolButton extends StatelessWidget {
+  const _TreeToolButton({required this.icon, required this.tooltip, required this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, size: 16, color: AppColors.outline),
+        ),
       ),
     );
   }
@@ -584,8 +705,9 @@ class _EmptyVaultHint extends StatelessWidget {
 // ── File Tree ─────────────────────────────────────────────────────────────────
 
 class _FileTree extends StatelessWidget {
-  const _FileTree({required this.nodes, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
+  const _FileTree({super.key, required this.nodes, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
   final List<dynamic> nodes;
+  final bool defaultExpanded;
   final String? activeFilePath;
   final void Function(String) onOpen;
   final Future<void> Function(String) onDelete;
@@ -597,6 +719,7 @@ class _FileTree extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: nodes.map((n) => _Node(
         node: n as Map<String, dynamic>, depth: 0,
+        defaultExpanded: defaultExpanded,
         activeFilePath: activeFilePath,
         onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
       )).toList(),
@@ -605,9 +728,10 @@ class _FileTree extends StatelessWidget {
 }
 
 class _Node extends StatefulWidget {
-  const _Node({required this.node, required this.depth, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
+  const _Node({required this.node, required this.depth, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
   final Map<String, dynamic> node;
   final int depth;
+  final bool defaultExpanded;
   final String? activeFilePath;
   final void Function(String) onOpen;
   final Future<void> Function(String) onDelete;
@@ -618,7 +742,13 @@ class _Node extends StatefulWidget {
 }
 
 class _NodeState extends State<_Node> {
-  bool _expanded = true;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.defaultExpanded;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -686,6 +816,7 @@ class _NodeState extends State<_Node> {
           ...((node['children'] as List? ?? []).map((child) => _Node(
             node: child as Map<String, dynamic>,
             depth: widget.depth + 1,
+            defaultExpanded: widget.defaultExpanded,
             activeFilePath: widget.activeFilePath,
             onOpen: widget.onOpen,
             onDelete: widget.onDelete,

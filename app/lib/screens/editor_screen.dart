@@ -72,16 +72,6 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
-  void _cycleMode() {
-    setState(() {
-      _mode = switch (_mode) {
-        EditorMode.split   => EditorMode.edit,
-        EditorMode.edit    => EditorMode.preview,
-        EditorMode.preview => EditorMode.split,
-      };
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final fileName = widget.filePath.split('/').last;
@@ -102,26 +92,7 @@ class _EditorScreenState extends State<EditorScreen> {
         ),
         backgroundColor: AppColors.surfaceContainerLow,
         actions: [
-          // Mode toggle button
-          Tooltip(
-            message: switch (_mode) {
-              EditorMode.split   => 'Modus: Split',
-              EditorMode.edit    => 'Modus: Bearbeiten',
-              EditorMode.preview => 'Modus: Lesen',
-            },
-            child: TextButton.icon(
-              onPressed: _cycleMode,
-              icon: Icon(_modeIcon(_mode), size: 16, color: AppColors.primary),
-              label: Text(
-                switch (_mode) {
-                  EditorMode.split   => 'Split',
-                  EditorMode.edit    => 'Bearbeiten',
-                  EditorMode.preview => 'Lesen',
-                },
-                style: GoogleFonts.spaceGrotesk(fontSize: 12, color: AppColors.primary),
-              ),
-            ),
-          ),
+          _EditorModeButtons(current: _mode, onSelect: (m) => setState(() => _mode = m)),
           const SizedBox(width: 4),
           if (_mode != EditorMode.preview)
             IconButton(
@@ -159,11 +130,6 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
-  IconData _modeIcon(EditorMode mode) => switch (mode) {
-    EditorMode.split   => Icons.view_column_outlined,
-    EditorMode.edit    => Icons.edit_outlined,
-    EditorMode.preview => Icons.chrome_reader_mode_outlined,
-  };
 }
 
 // ── Editor pane ───────────────────────────────────────────────────────────────
@@ -281,6 +247,49 @@ class _Tab extends StatelessWidget {
           )),
         ),
       ),
+    );
+  }
+}
+
+// ── Mode buttons for standalone EditorScreen ─────────────────────────────────
+
+class _EditorModeButtons extends StatelessWidget {
+  const _EditorModeButtons({required this.current, required this.onSelect});
+  final EditorMode current;
+  final void Function(EditorMode) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: EditorMode.values.map((m) {
+        final active = m == current;
+        final (icon, label) = switch (m) {
+          EditorMode.split   => (Icons.view_column_outlined, 'Split'),
+          EditorMode.edit    => (Icons.edit_outlined, 'Bearbeiten'),
+          EditorMode.preview => (Icons.chrome_reader_mode_outlined, 'Lesen'),
+        };
+        return Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: () => onSelect(m),
+            borderRadius: BorderRadius.circular(4),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              margin: const EdgeInsets.only(left: 2),
+              decoration: active
+                  ? BoxDecoration(
+                      color: AppColors.primary.withAlpha(30),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppColors.primary.withAlpha(80)),
+                    )
+                  : null,
+              child: Icon(icon, size: 16, color: active ? AppColors.primary : AppColors.outline),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
