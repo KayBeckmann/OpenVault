@@ -175,10 +175,14 @@ class GitService {
       final keyFile = File('${tmpDir.path}/id_rsa');
       final knownHostsFile = File('${tmpDir.path}/known_hosts');
 
-      // Decrypt and write private key
+      // Decrypt and write private key — trailing newline required by OpenSSH
       final pem = _decryptKey(encryptedKeyBlob);
-      await keyFile.writeAsString(pem);
-      await Process.run('chmod', ['600', keyFile.path]);
+      final pemContent = pem.endsWith('\n') ? pem : '$pem\n';
+      await keyFile.writeAsString(pemContent);
+      final chmodResult = await Process.run('chmod', ['600', keyFile.path]);
+      if (chmodResult.exitCode != 0) {
+        throw GitException('Failed to set key file permissions', 500);
+      }
 
       // Pre-populate GitHub/GitLab host keys to avoid interactive prompt
       await knownHostsFile.writeAsString(_knownHosts);
@@ -189,7 +193,19 @@ class GitService {
             'ssh -i ${keyFile.path} -o UserKnownHostsFile=${knownHostsFile.path} -o StrictHostKeyChecking=accept-new -o BatchMode=yes',
       };
 
-      await action(env);
+      try {
+        await action(env);
+      } on GitException catch (e) {
+        // Make libcrypto / key-format errors actionable
+        final msg = e.message.toLowerCase();
+        if (msg.contains('libcrypto') || msg.contains('invalid format') || msg.contains('load key')) {
+          throw GitException(
+            'SSH key format error — please delete this key in OpenVault, generate a new one, and add the new public key to GitHub/GitLab.',
+            422,
+          );
+        }
+        rethrow;
+      }
     } finally {
       await tmpDir.delete(recursive: true);
     }

@@ -35,8 +35,9 @@ class SshKeyService {
     try {
       final result = await Process.run('ssh-keygen', [
         '-t', 'rsa', '-b', '4096',
+        '-m', 'PEM',             // classic PEM format — widest SSH client compatibility
         '-f', keyPath,
-        '-N', '', // no passphrase — we encrypt ourselves
+        '-N', '',                // no passphrase — we encrypt ourselves
         '-C', label.trim(),
       ]);
 
