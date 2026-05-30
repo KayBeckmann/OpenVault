@@ -25,14 +25,16 @@ Router settingsRouter() {
 
     final templateFolder = body['templateFolder'] as String? ?? '_templates';
     final defaultNoteFolder = body['defaultNoteFolder'] as String? ?? '';
+    final autoPushOnClose = (body['autoPushOnClose'] as bool?) == true ? 1 : 0;
 
     db.execute('''
-      INSERT INTO vault_settings (vault_id, template_folder, default_note_folder)
-      VALUES (?, ?, ?)
+      INSERT INTO vault_settings (vault_id, template_folder, default_note_folder, auto_push_on_close)
+      VALUES (?, ?, ?, ?)
       ON CONFLICT(vault_id) DO UPDATE SET
         template_folder = excluded.template_folder,
-        default_note_folder = excluded.default_note_folder
-    ''', [vaultId, templateFolder, defaultNoteFolder]);
+        default_note_folder = excluded.default_note_folder,
+        auto_push_on_close = excluded.auto_push_on_close
+    ''', [vaultId, templateFolder, defaultNoteFolder, autoPushOnClose]);
 
     return _json(_getOrCreate(vaultId), 200);
   });
@@ -54,11 +56,12 @@ Map<String, dynamic> _getOrCreate(String vaultId) {
     [vaultId],
   );
   if (rows.isEmpty) {
-    return {'templateFolder': '_templates', 'defaultNoteFolder': ''};
+    return {'templateFolder': '_templates', 'defaultNoteFolder': '', 'autoPushOnClose': false};
   }
   return {
     'templateFolder': rows.first['template_folder'],
     'defaultNoteFolder': rows.first['default_note_folder'],
+    'autoPushOnClose': (rows.first['auto_push_on_close'] as int?) == 1,
   };
 }
 

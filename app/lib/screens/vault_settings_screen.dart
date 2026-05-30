@@ -16,6 +16,7 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  bool _autoPushOnClose = false;
   late TextEditingController _templateFolderCtrl;
   late TextEditingController _defaultNoteFolderCtrl;
 
@@ -40,6 +41,7 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
       final result = await ApiClient().get('/api/settings/${widget.vaultId}');
       _templateFolderCtrl.text = result['templateFolder'] as String? ?? '_templates';
       _defaultNoteFolderCtrl.text = result['defaultNoteFolder'] as String? ?? '';
+      setState(() { _autoPushOnClose = result['autoPushOnClose'] as bool? ?? false; });
     } on ApiException catch (e) {
       setState(() { _error = e.message; });
     } finally {
@@ -53,6 +55,7 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
       await ApiClient().put('/api/settings/${widget.vaultId}', {
         'templateFolder': _templateFolderCtrl.text.trim(),
         'defaultNoteFolder': _defaultNoteFolderCtrl.text.trim(),
+        'autoPushOnClose': _autoPushOnClose,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,6 +123,28 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
                         helperText: 'Leer = Vault-Wurzel. Ordner wird angelegt falls nicht vorhanden.',
                         helperStyle: GoogleFonts.inter(fontSize: 11, color: AppColors.outline),
                         prefixIcon: const Icon(Icons.create_new_folder_outlined, size: 18, color: AppColors.outline),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _SectionHeader('Beim Schließen'),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.outlineVariant),
+                      ),
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Automatisch committen & pushen', style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface)),
+                        subtitle: Text(
+                          'Alle Änderungen werden beim Schließen des Vaults automatisch committiert und gepusht.',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.outline, height: 1.4),
+                        ),
+                        value: _autoPushOnClose,
+                        onChanged: (v) => setState(() => _autoPushOnClose = v),
+                        activeThumbColor: AppColors.primary,
                       ),
                     ),
                     const SizedBox(height: 40),

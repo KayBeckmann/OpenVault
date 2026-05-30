@@ -27,11 +27,24 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   final _searchCtrl = TextEditingController();
   int _treeGeneration = 0;
   bool _treeDefaultExpanded = true;
+  String _defaultNoteFolder = '';
+  bool _autoPushOnClose = false;
 
   @override
   void initState() {
     super.initState();
     _loadTree();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final s = await ApiClient().get('/api/settings/${widget.vaultId}');
+      if (mounted) setState(() {
+        _defaultNoteFolder = s['defaultNoteFolder'] as String? ?? '';
+        _autoPushOnClose = s['autoPushOnClose'] as bool? ?? false;
+      });
+    } catch (_) {}
   }
 
   @override
@@ -69,19 +82,34 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
 
   Future<void> _createFile(String parentPath) async {
     final ctrl = TextEditingController(text: 'neue-notiz.md');
+    // If no specific parent given, use the default note folder from settings
+    final effectiveParent = parentPath.isEmpty ? _defaultNoteFolder : parentPath;
     final created = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerLow,
         title: Text('Neue Datei', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
-        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Dateiname'), autofocus: true),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Dateiname'), autofocus: true),
+            if (effectiveParent.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ordner: $effectiveParent/',
+                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
-              final path = parentPath.isEmpty ? name : '$parentPath/$name';
+              final path = effectiveParent.isEmpty ? name : '$effectiveParent/$name';
               Navigator.pop(ctx, path);
             },
             child: const Text('Erstellen'),
@@ -94,6 +122,24 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
     await _loadTree();
     _openFile(created);
   }
+
+  Future<void> _closeVault() async {
+    if (_autoPushOnClose) {
+      setState(() { _working = true; });
+      try {
+        await ApiClient().post('/api/vaults/${widget.vaultId}/push', {
+          'commitMessage': 'Auto-commit beim Schließen (OpenVault)',
+        });
+      } catch (_) {
+        // Fehler beim Push ignorieren — Vault trotzdem schließen
+      } finally {
+        if (mounted) setState(() { _working = false; });
+      }
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  bool _working = false;
 
   Future<void> _deleteFile(String path) async {
     final confirmed = await showDialog<bool>(
@@ -144,6 +190,13 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
             )),
           ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTree, tooltip: 'Aktualisieren'),
+          IconButton(
+            icon: _working
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                : Icon(_autoPushOnClose ? Icons.cloud_done_outlined : Icons.close, color: AppColors.onSurface),
+            tooltip: _autoPushOnClose ? 'Vault schließen & pushen' : 'Vault schließen',
+            onPressed: _working ? null : _closeVault,
+          ),
         ],
       ),
       body: LayoutBuilder(
