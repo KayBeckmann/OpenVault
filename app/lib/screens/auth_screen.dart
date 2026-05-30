@@ -14,6 +14,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   bool _isLogin = true;
   bool _loading = false;
+  bool _rememberMe = false;
   String? _error;
 
   final _emailCtrl = TextEditingController();
@@ -33,7 +34,11 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       if (_isLogin) {
-        await AuthService().login(_emailCtrl.text.trim(), _passwordCtrl.text);
+        await AuthService().login(
+          _emailCtrl.text.trim(),
+          _passwordCtrl.text,
+          rememberMe: _rememberMe,
+        );
       } else {
         await AuthService().register(_emailCtrl.text.trim(), _passwordCtrl.text);
       }
@@ -94,6 +99,34 @@ class _AuthScreenState extends State<AuthScreen> {
                               ? 'At least 8 characters'
                               : null,
                         ),
+                        if (_isLogin) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: _rememberMe,
+                                  onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                                  activeColor: AppColors.primary,
+                                  side: const BorderSide(color: AppColors.outline),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              GestureDetector(
+                                onTap: () => setState(() => _rememberMe = !_rememberMe),
+                                child: Text(
+                                  'Angemeldet bleiben (7 Tage)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (_error != null) ...[
                           const SizedBox(height: 16),
                           Container(
@@ -176,7 +209,7 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Icon(Icons.lock_outline, size: 40, color: AppColors.primary),
+        const Icon(Icons.diamond_outlined, size: 40, color: AppColors.primary),
         const SizedBox(height: 12),
         Text(
           'OpenVault',

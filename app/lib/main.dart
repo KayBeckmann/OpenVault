@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
+import 'theme/app_colors.dart';
 import 'services/auth_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
@@ -36,11 +37,37 @@ class OpenVaultApp extends StatelessWidget {
   }
 }
 
-class _WebRootRouter extends StatelessWidget {
+class _WebRootRouter extends StatefulWidget {
   const _WebRootRouter();
 
   @override
+  State<_WebRootRouter> createState() => _WebRootRouterState();
+}
+
+class _WebRootRouterState extends State<_WebRootRouter> {
+  bool _restoring = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _restore();
+  }
+
+  Future<void> _restore() async {
+    await context.read<AuthService>().tryRestoreSession();
+    if (mounted) setState(() => _restoring = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_restoring) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
     final auth = context.watch<AuthService>();
     return auth.isAuthenticated ? const HomeScreen() : const AuthScreen();
   }

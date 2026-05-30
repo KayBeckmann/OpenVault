@@ -10,7 +10,8 @@ import 'vault_crypto_service.dart';
 const _uuid = Uuid();
 
 final _jwtSecret = Platform.environment['JWT_SECRET'] ?? 'dev-secret-change-in-production';
-const _tokenTtl = Duration(hours: 24);
+const _tokenTtlShort = Duration(hours: 24);
+const _tokenTtlLong = Duration(days: 7);
 
 String _now() => DateTime.now().toUtc().toIso8601String();
 
@@ -50,21 +51,43 @@ class AuthService {
     return {'user': user.toPublicJson(), 'token': token};
   }
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(
+    String email,
+    String password, {
+    bool rememberMe = false,
+  }) async {
     final rows = db.select('SELECT * FROM users WHERE email = ?', [email]);
-    if (rows.isEmpty) {
-      throw AuthException('Invalid credentials', 401);
-    }
+    if (rows.isEmpty) throw AuthException('Invalid credentials', 401);
 
     final user = User.fromRow(rows.first);
-    final valid = verifyPassword(password, user.pbkdf2Salt, user.passwordHash);
-    if (!valid) {
+    if (!verifyPassword(password, user.pbkdf2Salt, user.passwordHash)) {
       throw AuthException('Invalid credentials', 401);
     }
 
-    final (token, sessionId) = _issueToken(user.id);
+    final (token, sessionId) = _issueToken(user.id, rememberMe: rememberMe);
     _cacheVaultKey(sessionId, password, user.encryptionSalt);
     return {'user': user.toPublicJson(), 'token': token};
+  }
+
+  /// Issues a fresh token for an existing valid session (rolling 7-day window).
+  /// Only allowed for remember_me sessions.
+  Future<Map<String, dynamic>> refreshToken(String oldToken) async {
+    final result = getUserAndSessionFromToken(oldToken);
+    if (result == null) throw AuthException('Invalid or expired token', 401);
+    final (user, sessionId) = result;
+
+    final rows = db.select(
+      'SELECT remember_me FROM sessions WHERE id = ?',
+      [sessionId],
+    );
+    if (rows.isEmpty) throw AuthException('Session not found', 401);
+    final isRememberMe = (rows.first['remember_me'] as int? ?? 0) == 1;
+    if (!isRememberMe) throw AuthException('Not a remember-me session', 400);
+
+    // Revoke old session, issue new 7-day token
+    db.execute('UPDATE sessions SET revoked = 1 WHERE id = ?', [sessionId]);
+    final (newToken, _) = _issueToken(user.id, rememberMe: true);
+    return {'token': newToken, 'user': user.toPublicJson()};
   }
 
   void logout(String sessionId) {
@@ -98,18 +121,22 @@ class AuthService {
 
   User? getUserFromToken(String token) => getUserAndSessionFromToken(token)?.$1;
 
-  (String token, String sessionId) _issueToken(String userId) {
+  (String token, String sessionId) _issueToken(
+    String userId, {
+    bool rememberMe = false,
+  }) {
     final sessionId = _uuid.v4();
     final now = DateTime.now().toUtc();
-    final expires = now.add(_tokenTtl);
+    final ttl = rememberMe ? _tokenTtlLong : _tokenTtlShort;
+    final expires = now.add(ttl);
 
     db.execute(
-      'INSERT INTO sessions (id, user_id, issued_at, expires_at) VALUES (?, ?, ?, ?)',
-      [sessionId, userId, now.toIso8601String(), expires.toIso8601String()],
+      'INSERT INTO sessions (id, user_id, issued_at, expires_at, remember_me) VALUES (?, ?, ?, ?, ?)',
+      [sessionId, userId, now.toIso8601String(), expires.toIso8601String(), rememberMe ? 1 : 0],
     );
 
     final jwt = JWT({'sub': userId}, jwtId: sessionId);
-    final token = jwt.sign(SecretKey(_jwtSecret), expiresIn: _tokenTtl);
+    final token = jwt.sign(SecretKey(_jwtSecret), expiresIn: ttl);
     return (token, sessionId);
   }
 

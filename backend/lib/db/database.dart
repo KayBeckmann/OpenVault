@@ -48,9 +48,13 @@ void _migrate(Database d) {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       issued_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      revoked INTEGER NOT NULL DEFAULT 0
+      revoked INTEGER NOT NULL DEFAULT 0,
+      remember_me INTEGER NOT NULL DEFAULT 0
     )
   ''');
+  try {
+    d.execute('ALTER TABLE sessions ADD COLUMN remember_me INTEGER NOT NULL DEFAULT 0');
+  } catch (_) {}
 
   d.execute('''
     CREATE TABLE IF NOT EXISTS vaults (

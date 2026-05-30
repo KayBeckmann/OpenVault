@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2E1065"/>
+      <stop offset="100%" stop-color="#0D0520"/>
+    </linearGradient>
+    <!-- Crystal facet gradients -->
+    <linearGradient id="fTL" x1="185" y1="120" x2="115" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="fTR" x1="327" y1="120" x2="397" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#4C1D95"/>
+    </linearGradient>
+    <linearGradient id="fBL" x1="186" y1="280" x2="186" y2="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </linearGradient>
+    <linearGradient id="fBR" x1="326" y1="280" x2="326" y2="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5B21B6"/>
+      <stop offset="100%" stop-color="#2E1065"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="gf" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded background -->
+  <rect width="512" height="512" rx="106" fill="url(#bg)"/>
+
+  <!-- ── Crystal body ───────────────────────────────────── -->
+  <!-- Top-left crown facet -->
+  <polygon points="185,120 115,280 256,280" fill="url(#fTL)"/>
+  <!-- Top-right crown facet -->
+  <polygon points="327,120 397,280 256,280" fill="url(#fTR)"/>
+  <!-- Top center facet (between the two crown peaks) -->
+  <polygon points="185,120 327,120 256,168" fill="#9333EA"/>
+  <!-- Bottom-left pavilion -->
+  <polygon points="115,280 256,450 256,280" fill="url(#fBL)"/>
+  <!-- Bottom-right pavilion -->
+  <polygon points="397,280 256,450 256,280" fill="url(#fBR)"/>
+
+  <!-- ── Open vault lid ─────────────────────────────────── -->
+  <!-- Left lid wing spread up-left -->
+  <polygon points="185,120 112,52 162,108" fill="#C084FC"/>
+  <!-- Right lid wing spread up-right -->
+  <polygon points="327,120 400,52 350,108" fill="#A78BFA"/>
+
+  <!-- ── Light glow through the opening ────────────────── -->
+  <!-- Soft outer halo (blurred) -->
+  <ellipse cx="256" cy="122" rx="95" ry="32" fill="#DDD6FE" filter="url(#gf)" opacity="0.9"/>
+  <!-- Mid glow -->
+  <ellipse cx="256" cy="122" rx="58" ry="19" fill="#EDE9FE" opacity="0.95"/>
+  <!-- Bright core -->
+  <ellipse cx="256" cy="122" rx="30" ry="10" fill="white" opacity="1"/>
+</svg>

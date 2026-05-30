@@ -37,8 +37,24 @@ Router authRouter() {
       return _badRequest('email and password are required');
     }
 
+    final rememberMe = body['rememberMe'] as bool? ?? false;
     try {
-      final result = await _auth.login(email, password);
+      final result = await _auth.login(email, password, rememberMe: rememberMe);
+      return _json(result, 200);
+    } on AuthException catch (e) {
+      return _json({'error': e.message}, e.statusCode);
+    }
+  });
+
+  // Refresh a remember-me session → new 7-day token (rolling window)
+  router.post('/refresh', (Request req) async {
+    final authHeader = req.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return _json({'error': 'Authorization required'}, 401);
+    }
+    final token = authHeader.substring(7);
+    try {
+      final result = await _auth.refreshToken(token);
       return _json(result, 200);
     } on AuthException catch (e) {
       return _json({'error': e.message}, e.statusCode);
