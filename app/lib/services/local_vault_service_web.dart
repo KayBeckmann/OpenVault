@@ -16,6 +16,6 @@ class LocalVaultService {
   static List<Map<String, dynamic>> searchFiles(String base, String query) => [];
   static List<String> collectFilePaths(String base) => [];
   static Future<({bool success, String output})> cloneRepo(
-          String url, String destPath) async =>
+          String url, String destPath, {String? sshKeyPath}) async =>
       (success: false, output: 'Not supported on web');
 }

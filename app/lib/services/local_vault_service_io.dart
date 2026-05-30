@@ -147,16 +147,31 @@ class LocalVaultService {
 
   static Future<({bool success, String output})> cloneRepo(
     String url,
-    String destPath,
-  ) async {
-    final result = await Process.run(
-      'git',
-      ['clone', url, destPath],
-      environment: {
-        ...Platform.environment,
-        'GIT_TERMINAL_PROMPT': '0',
-      },
-    );
+    String destPath, {
+    String? sshKeyPath,
+  }) async {
+    // git is not a system binary on Android
+    if (Platform.isAndroid) {
+      try {
+        final check = await Process.run('git', ['--version']);
+        if (check.exitCode != 0) throw Exception();
+      } catch (_) {
+        return (
+          success: false,
+          output: 'git ist auf diesem Gerät nicht verfügbar.\n'
+              'Android-Unterstützung via libgit2dart ist in Phase 4 geplant.\n'
+              'Tipp: Klone das Repository auf einem Desktop und öffne es hier.',
+        );
+      }
+    }
+    final env = {
+      ...Platform.environment,
+      'GIT_TERMINAL_PROMPT': '0',
+      if (sshKeyPath != null)
+        'GIT_SSH_COMMAND':
+            'ssh -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes',
+    };
+    final result = await Process.run('git', ['clone', url, destPath], environment: env);
     final out = '${result.stdout}${result.stderr}'.trim();
     return (success: result.exitCode == 0, output: out);
   }

@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/local_vault_service.dart';
+import '../services/ssh_key_service.dart';
+import '../widgets/folder_picker_dialog.dart';
 import 'file_browser_screen.dart';
 
 class NativeVaultScreen extends StatefulWidget {
@@ -18,11 +21,14 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
   bool _cloning = false;
   String? _statusMessage;
   bool _statusIsError = false;
+  SshKeyInfo? _sshKey;
+  bool _sshKeyLoading = true;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadSshKey();
   }
 
   Future<void> _load() async {
@@ -30,10 +36,31 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
     if (mounted) setState(() { _vaults = vaults; _loading = false; });
   }
 
+  Future<void> _loadSshKey() async {
+    final key = await SshKeyService.findKey();
+    if (mounted) setState(() { _sshKey = key; _sshKeyLoading = false; });
+  }
+
+  Future<void> _generateKey() async {
+    setState(() => _sshKeyLoading = true);
+    try {
+      final key = await SshKeyService.generateKey();
+      if (mounted) setState(() { _sshKey = key; _sshKeyLoading = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sshKeyLoading = false);
+        _showStatus('Key-Generierung fehlgeschlagen: $e', isError: true);
+      }
+    }
+  }
+
+  void _showStatus(String msg, {bool isError = false}) =>
+      setState(() { _statusMessage = msg; _statusIsError = isError; });
+
   Future<void> _showAddDialog() async {
     final result = await showDialog<_VaultAction>(
       context: context,
-      builder: (_) => const _AddVaultDialog(),
+      builder: (_) => _AddVaultDialog(sshKey: _sshKey),
     );
     if (result == null) return;
 
@@ -52,15 +79,18 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
   Future<void> _cloneAndAdd(_VaultAction action) async {
     setState(() { _cloning = true; _statusMessage = 'Cloning ${action.remoteUrl} …'; _statusIsError = false; });
     try {
-      final dest = action.localPath!;
-      final result = await LocalVaultService.cloneRepo(action.remoteUrl!, dest);
+      final result = await LocalVaultService.cloneRepo(
+        action.remoteUrl!,
+        action.localPath!,
+        sshKeyPath: action.sshKeyPath,
+      );
       if (!result.success) {
         if (mounted) setState(() { _statusMessage = result.output.isNotEmpty ? result.output : 'Clone fehlgeschlagen'; _statusIsError = true; });
         return;
       }
       final vault = await LocalVaultService.addVault(
         name: action.name,
-        localPath: dest,
+        localPath: action.localPath!,
         remoteUrl: action.remoteUrl,
       );
       if (mounted) setState(() { _vaults.add(vault); _statusMessage = 'Clone erfolgreich!'; _statusIsError = false; });
@@ -132,6 +162,11 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
       ),
       body: Column(
         children: [
+          _SshKeyCard(
+            keyInfo: _sshKey,
+            loading: _sshKeyLoading,
+            onGenerate: _generateKey,
+          ),
           if (_statusMessage != null)
             _StatusBanner(
               message: _statusMessage!,
@@ -145,6 +180,144 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
                     ? _EmptyState(onAdd: _showAddDialog)
                     : _VaultList(vaults: _vaults, onOpen: _openVault, onRemove: _removeVault),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── SSH Key Card ──────────────────────────────────────────────────────────────
+
+class _SshKeyCard extends StatelessWidget {
+  const _SshKeyCard({required this.keyInfo, required this.loading, required this.onGenerate});
+  final SshKeyInfo? keyInfo;
+  final bool loading;
+  final VoidCallback onGenerate;
+
+  String _platformNote() {
+    if (Platform.isAndroid) return 'App-verwalteter Key (in App-Verzeichnis)';
+    if (Platform.isWindows) return 'System-Key (%USERPROFILE%\\.ssh\\)';
+    return 'System-Key (~/.ssh/)';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: AppColors.surfaceContainerHigh,
+      child: loading
+          ? Row(children: [
+              const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+              const SizedBox(width: 10),
+              Text('SSH-Key wird gesucht …',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+            ])
+          : keyInfo == null
+              ? Row(children: [
+                  const Icon(Icons.key_off_outlined, size: 16, color: AppColors.outline),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Kein SSH-Key gefunden',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                        Text(_platformNote(),
+                            style: GoogleFonts.inter(fontSize: 10, color: AppColors.outline)),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: onGenerate,
+                    icon: const Icon(Icons.generating_tokens, size: 14),
+                    label: const Text('Generieren'),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                  ),
+                ])
+              : Row(children: [
+                  const Icon(Icons.key, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          keyInfo!.isSystemKey ? 'System-Key' : 'App-Key',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500,
+                              color: AppColors.onSurface),
+                        ),
+                        Text(
+                          keyInfo!.privateKeyPath,
+                          style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.outline),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 14),
+                    tooltip: 'Public Key kopieren',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: keyInfo!.publicKey));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Public Key kopiert'), duration: Duration(seconds: 2)),
+                      );
+                    },
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, size: 14),
+                    tooltip: 'Public Key anzeigen',
+                    onPressed: () => _showPublicKey(context),
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ]),
+    );
+  }
+
+  void _showPublicKey(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        title: Text('Public Key', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Füge diesen Key bei GitHub / GitLab / Gitea unter\nSettings → SSH Keys hinzu.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: SelectableText(
+                keyInfo!.publicKey,
+                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.onSurface),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: keyInfo!.publicKey));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Kopiert'), duration: Duration(seconds: 2)),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 14),
+            label: const Text('Kopieren & Schließen'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Schließen')),
         ],
       ),
     );
@@ -166,6 +339,7 @@ class _StatusBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       color: isError ? AppColors.errorContainer : AppColors.surfaceContainerHigh,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Text(message,
@@ -270,9 +444,7 @@ class _VaultCard extends StatelessWidget {
               Expanded(
                 child: Text(vault['name'] as String? ?? '',
                     style: GoogleFonts.spaceGrotesk(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface)),
+                        fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.error),
@@ -286,17 +458,15 @@ class _VaultCard extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline)),
           if (vault['remoteUrl'] != null) ...[
             const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(Icons.link, size: 12, color: AppColors.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(vault['remoteUrl'] as String,
-                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
+            Row(children: [
+              const Icon(Icons.link, size: 12, color: AppColors.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(vault['remoteUrl'] as String,
+                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ]),
           ],
           const SizedBox(height: 12),
           ElevatedButton.icon(
@@ -323,17 +493,20 @@ class _VaultAction {
     required this.clone,
     this.localPath,
     this.remoteUrl,
+    this.sshKeyPath,
   });
   final String name;
   final bool clone;
   final String? localPath;
   final String? remoteUrl;
+  final String? sshKeyPath;
 }
 
 // ── Add / Clone Dialog ────────────────────────────────────────────────────────
 
 class _AddVaultDialog extends StatefulWidget {
-  const _AddVaultDialog();
+  const _AddVaultDialog({this.sshKey});
+  final SshKeyInfo? sshKey;
 
   @override
   State<_AddVaultDialog> createState() => _AddVaultDialogState();
@@ -344,11 +517,24 @@ class _AddVaultDialogState extends State<_AddVaultDialog> {
   final _nameCtrl = TextEditingController();
   final _pathCtrl = TextEditingController();
   final _urlCtrl = TextEditingController();
+  bool _initializingPath = false;
 
   @override
   void initState() {
     super.initState();
     _urlCtrl.addListener(_autoFillName);
+    _initDefaultPath();
+  }
+
+  Future<void> _initDefaultPath() async {
+    setState(() => _initializingPath = true);
+    final path = await SshKeyService.defaultVaultPath();
+    if (mounted) {
+      setState(() {
+        if (_pathCtrl.text.isEmpty) _pathCtrl.text = path;
+        _initializingPath = false;
+      });
+    }
   }
 
   @override
@@ -359,7 +545,6 @@ class _AddVaultDialogState extends State<_AddVaultDialog> {
     super.dispose();
   }
 
-  // Auto-fill name from last path segment of the remote URL
   void _autoFillName() {
     if (!_cloneMode || _nameCtrl.text.isNotEmpty) return;
     final url = _urlCtrl.text.trim();
@@ -368,19 +553,28 @@ class _AddVaultDialogState extends State<_AddVaultDialog> {
     if (segment.isNotEmpty) _nameCtrl.text = segment;
   }
 
-  // Auto-fill destination path from name
-  void _autoFillPath() {
-    if (!_cloneMode) return;
-    final name = _nameCtrl.text.trim();
-    if (name.isNotEmpty && _pathCtrl.text.isEmpty) {
-      _pathCtrl.text = '${_homeDir()}/$name';
+  Future<void> _browseFolder() async {
+    final startPath = _pathCtrl.text.trim().isNotEmpty
+        ? _pathCtrl.text.trim()
+        : await SshKeyService.browseRoot();
+    if (!mounted) return;
+    final selected = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => FolderPickerDialog(initialPath: startPath),
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        if (_cloneMode && _nameCtrl.text.isNotEmpty) {
+          _pathCtrl.text = '$selected${Platform.pathSeparator}${_nameCtrl.text.trim()}';
+        } else {
+          _pathCtrl.text = selected;
+        }
+      });
     }
   }
-
-  String _homeDir() =>
-      Platform.environment['HOME'] ??
-      Platform.environment['USERPROFILE'] ??
-      '/home/user';
 
   bool get _valid {
     if (_nameCtrl.text.trim().isEmpty) return false;
@@ -395,7 +589,13 @@ class _AddVaultDialogState extends State<_AddVaultDialog> {
       clone: _cloneMode,
       localPath: _pathCtrl.text.trim(),
       remoteUrl: _urlCtrl.text.trim().isEmpty ? null : _urlCtrl.text.trim(),
+      sshKeyPath: widget.sshKey?.privateKeyPath,
     ));
+  }
+
+  String _sshNote() {
+    if (widget.sshKey == null) return 'Kein SSH-Key — nur HTTPS-Clone möglich';
+    return 'SSH-Key: ${widget.sshKey!.privateKeyPath}';
   }
 
   @override
@@ -405,83 +605,118 @@ class _AddVaultDialogState extends State<_AddVaultDialog> {
       title: Text(_cloneMode ? 'Vault clonen' : 'Vault hinzufügen',
           style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
       content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Mode toggle
-            Row(
-              children: [
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
                 _ModeChip(
                   label: 'Vorhandener Ordner',
                   icon: Icons.folder_open,
                   active: !_cloneMode,
-                  onTap: () => setState(() { _cloneMode = false; _pathCtrl.clear(); }),
+                  onTap: () => setState(() { _cloneMode = false; }),
                 ),
                 const SizedBox(width: 8),
                 _ModeChip(
                   label: 'Clone via Git',
                   icon: Icons.cloud_download_outlined,
                   active: _cloneMode,
-                  onTap: () => setState(() { _cloneMode = true; _pathCtrl.clear(); }),
+                  onTap: () => setState(() { _cloneMode = true; }),
+                ),
+              ]),
+              const SizedBox(height: 16),
+
+              if (_cloneMode) ...[
+                TextField(
+                  controller: _urlCtrl,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Git Remote URL',
+                    hintText: 'git@github.com:user/vault.git',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                const SizedBox(height: 12),
+                // SSH key note
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(children: [
+                    Icon(
+                      widget.sshKey != null ? Icons.key : Icons.key_off_outlined,
+                      size: 13,
+                      color: widget.sshKey != null ? AppColors.primary : AppColors.outline,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(_sshNote(),
+                          style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ]),
+                ),
+                if (Platform.isAndroid) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Hinweis: git-Binary auf Android nicht verfügbar — Clone schlägt fehl.\n'
+                    'libgit2dart-Integration ist in Phase 4 geplant.',
+                    style: GoogleFonts.inter(fontSize: 10, color: AppColors.outline),
+                  ),
+                ],
+              ] else ...[
+                TextField(
+                  controller: _nameCtrl,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Name'),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
 
-            if (_cloneMode) ...[
-              TextField(
-                controller: _urlCtrl,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Git Remote URL',
-                  hintText: 'git@github.com:user/vault.git',
-                  helperText: 'SSH-Key aus ~/.ssh/ wird automatisch verwendet',
-                ),
-              ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _nameCtrl,
-                onChanged: (_) => setState(() {}),
-                onEditingComplete: _autoFillPath,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _pathCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Zielverzeichnis',
-                  hintText: '/home/user/vaults/mein-vault',
-                  helperText: 'Ordner wird angelegt wenn nicht vorhanden',
+              // Path field with browse button
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _pathCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: _cloneMode ? 'Zielverzeichnis' : 'Lokaler Pfad',
+                      hintText: _cloneMode ? '/home/user/vaults/mein-vault' : '/home/user/mein-vault',
+                      suffixIcon: _initializingPath
+                          ? const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: SizedBox(width: 14, height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2,
+                                      color: AppColors.primary)),
+                            )
+                          : null,
+                    ),
+                  ),
                 ),
-              ),
-            ] else ...[
-              TextField(
-                controller: _nameCtrl,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _pathCtrl,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Lokaler Pfad',
-                  hintText: '/home/user/git/mein-vault',
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _browseFolder,
+                  icon: const Icon(Icons.folder_open, color: AppColors.primary),
+                  tooltip: 'Ordner durchsuchen',
                 ),
-              ),
+              ]),
             ],
-          ],
+          ),
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
         ElevatedButton.icon(
           onPressed: _valid ? _submit : null,
           icon: Icon(_cloneMode ? Icons.cloud_download : Icons.add, size: 16),
