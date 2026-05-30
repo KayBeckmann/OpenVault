@@ -98,7 +98,7 @@ class _TagsScreenState extends State<TagsScreen> {
                         selectedTags: _selectedTags,
                         op: _filterOp,
                       )),
-                    if (_selectedTags.isEmpty) Expanded(child: _AllTagsList(tags: _tags, onTap: _toggleTag)),
+                    if (_selectedTags.isEmpty) Expanded(child: _AllTagsList(tags: _tags, onTap: _toggleTag, vaultId: widget.vaultId)),
                   ],
                 ),
     );
@@ -207,9 +207,10 @@ class _TagCloud extends StatelessWidget {
 }
 
 class _AllTagsList extends StatelessWidget {
-  const _AllTagsList({required this.tags, required this.onTap});
+  const _AllTagsList({required this.tags, required this.onTap, required this.vaultId});
   final List<Map<String, dynamic>> tags;
   final void Function(String) onTap;
+  final String vaultId;
 
   @override
   Widget build(BuildContext context) {
@@ -234,9 +235,11 @@ class _AllTagsList extends StatelessWidget {
           tilePadding: const EdgeInsets.symmetric(horizontal: 8),
           children: files.map((f) => ListTile(
             dense: true,
-            leading: const Icon(Icons.description_outlined, size: 14, color: AppColors.outline),
+            leading: const Icon(Icons.description_outlined, size: 14, color: AppColors.primary),
             title: Text(f, style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurface)),
-            onTap: () => onTap(tag),
+            onTap: () => Navigator.push(ctx, MaterialPageRoute(
+              builder: (_) => EditorScreen(vaultId: vaultId, filePath: f),
+            )),
           )).toList(),
         );
       },

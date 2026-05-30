@@ -9,6 +9,7 @@ import 'package:backend/routes/health_routes.dart';
 import 'package:backend/routes/ssh_key_routes.dart';
 import 'package:backend/routes/vault_routes.dart';
 import 'package:backend/routes/file_routes.dart';
+import 'package:backend/routes/settings_routes.dart';
 import 'package:backend/middleware/auth_middleware.dart';
 
 void main(List<String> args) async {
@@ -41,6 +42,7 @@ Router _protectedRouter() {
   router.mount('/ssh-keys/', sshKeyRouter().call);
   router.mount('/vaults/', vaultRouter().call);
   router.mount('/files/', fileRouter().call);
+  router.mount('/settings/', settingsRouter().call);
 
   return router;
 }

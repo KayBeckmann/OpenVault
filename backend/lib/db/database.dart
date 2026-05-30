@@ -72,6 +72,14 @@ void _migrate(Database d) {
   }
 
   d.execute('''
+    CREATE TABLE IF NOT EXISTS vault_settings (
+      vault_id TEXT PRIMARY KEY REFERENCES vaults(id) ON DELETE CASCADE,
+      template_folder TEXT NOT NULL DEFAULT '_templates',
+      default_note_folder TEXT NOT NULL DEFAULT ''
+    )
+  ''');
+
+  d.execute('''
     CREATE TABLE IF NOT EXISTS ssh_keys (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

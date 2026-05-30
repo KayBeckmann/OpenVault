@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import 'file_browser_screen.dart';
+import 'vault_settings_screen.dart';
 
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
@@ -280,11 +281,23 @@ class _VaultCard extends StatelessWidget {
                   )),
                 ),
                 icon: const Icon(Icons.folder_open, size: 14),
-                label: const Text('Open'),
+                label: const Text('Öffnen'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.secondaryContainer,
                   foregroundColor: AppColors.onSecondaryContainer,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, size: 18, color: AppColors.onSurfaceVariant),
+                tooltip: 'Einstellungen',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => VaultSettingsScreen(
+                    vaultId: vault['id'] as String,
+                    vaultName: vault['name'] as String? ?? 'Vault',
+                  )),
                 ),
               ),
             ],

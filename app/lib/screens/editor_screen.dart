@@ -4,6 +4,8 @@ import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import '../widgets/obsidian_preview.dart';
 
+enum EditorMode { split, edit, preview }
+
 class EditorScreen extends StatefulWidget {
   const EditorScreen({super.key, required this.vaultId, required this.filePath});
 
@@ -18,6 +20,7 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _loading = true;
   bool _saving = false;
   bool _dirty = false;
+  EditorMode _mode = EditorMode.split;
   late TextEditingController _ctrl;
 
   @override
@@ -57,18 +60,26 @@ class _EditorScreenState extends State<EditorScreen> {
       setState(() { _dirty = false; });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),
+          const SnackBar(content: Text('Gespeichert'), duration: Duration(seconds: 1)),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
       }
     } finally {
       if (mounted) setState(() { _saving = false; });
     }
+  }
+
+  void _cycleMode() {
+    setState(() {
+      _mode = switch (_mode) {
+        EditorMode.split   => EditorMode.edit,
+        EditorMode.edit    => EditorMode.preview,
+        EditorMode.preview => EditorMode.split,
+      };
+    });
   }
 
   @override
@@ -91,60 +102,95 @@ class _EditorScreenState extends State<EditorScreen> {
         ),
         backgroundColor: AppColors.surfaceContainerLow,
         actions: [
-          IconButton(
-            icon: _saving
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                : const Icon(Icons.save_outlined),
-            onPressed: _saving ? null : _save,
-            tooltip: 'Save',
+          // Mode toggle button
+          Tooltip(
+            message: switch (_mode) {
+              EditorMode.split   => 'Modus: Split',
+              EditorMode.edit    => 'Modus: Bearbeiten',
+              EditorMode.preview => 'Modus: Lesen',
+            },
+            child: TextButton.icon(
+              onPressed: _cycleMode,
+              icon: Icon(_modeIcon(_mode), size: 16, color: AppColors.primary),
+              label: Text(
+                switch (_mode) {
+                  EditorMode.split   => 'Split',
+                  EditorMode.edit    => 'Bearbeiten',
+                  EditorMode.preview => 'Lesen',
+                },
+                style: GoogleFonts.spaceGrotesk(fontSize: 12, color: AppColors.primary),
+              ),
+            ),
           ),
+          const SizedBox(width: 4),
+          if (_mode != EditorMode.preview)
+            IconButton(
+              icon: _saving
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                  : const Icon(Icons.save_outlined),
+              onPressed: _saving ? null : _save,
+              tooltip: 'Speichern (Ctrl+S)',
+            ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : LayoutBuilder(
               builder: (ctx, constraints) {
-                final isWide = constraints.maxWidth >= 800;
-                if (isWide) {
-                  return Row(children: [
-                    Expanded(child: _Editor(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
-                    Container(width: 1, color: AppColors.outlineVariant),
-                    Expanded(child: _Preview(content: _ctrl.text)),
-                  ]);
+                final isWide = constraints.maxWidth >= 700;
+                if (!isWide) {
+                  return _MobileEditorView(
+                    ctrl: _ctrl,
+                    onChanged: () => setState(() => _dirty = true),
+                  );
                 }
-                return _MobileEditorView(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true));
+                return switch (_mode) {
+                  EditorMode.split => Row(children: [
+                      Expanded(child: _EditorPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
+                      Container(width: 1, color: AppColors.outlineVariant),
+                      Expanded(child: _PreviewPane(content: _ctrl.text)),
+                    ]),
+                  EditorMode.edit => _EditorPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true)),
+                  EditorMode.preview => _PreviewPane(content: _ctrl.text),
+                };
               },
             ),
     );
   }
+
+  IconData _modeIcon(EditorMode mode) => switch (mode) {
+    EditorMode.split   => Icons.view_column_outlined,
+    EditorMode.edit    => Icons.edit_outlined,
+    EditorMode.preview => Icons.chrome_reader_mode_outlined,
+  };
 }
 
-class _Editor extends StatelessWidget {
-  const _Editor({required this.ctrl, required this.onChanged});
+// ── Editor pane ───────────────────────────────────────────────────────────────
+
+class _EditorPane extends StatelessWidget {
+  const _EditorPane({required this.ctrl, required this.onChanged});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
+      color: AppColors.background,
       padding: const EdgeInsets.all(24),
       child: TextField(
         controller: ctrl,
         onChanged: (_) => onChanged(),
         maxLines: null,
         expands: true,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 14,
-          height: 1.6,
-          color: AppColors.onSurface,
-        ),
-        decoration: const InputDecoration(
+        style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.6, color: AppColors.onSurface),
+        decoration: InputDecoration(
           border: InputBorder.none,
           focusedBorder: InputBorder.none,
           enabledBorder: InputBorder.none,
           filled: false,
-          hintText: 'Start writing…',
+          hintText: 'Hier schreiben…',
+          hintStyle: GoogleFonts.jetBrainsMono(color: AppColors.outline),
         ),
         cursorColor: AppColors.primary,
         keyboardType: TextInputType.multiline,
@@ -152,6 +198,31 @@ class _Editor extends StatelessWidget {
     );
   }
 }
+
+// ── Preview pane ──────────────────────────────────────────────────────────────
+
+class _PreviewPane extends StatelessWidget {
+  const _PreviewPane({required this.content});
+  final String content;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.background,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: ObsidianPreview(content: content),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mobile: Tab-Toggle ────────────────────────────────────────────────────────
 
 class _MobileEditorView extends StatefulWidget {
   const _MobileEditorView({required this.ctrl, required this.onChanged});
@@ -173,15 +244,15 @@ class _MobileEditorViewState extends State<_MobileEditorView> {
           color: AppColors.surfaceContainerHigh,
           child: Row(
             children: [
-              Expanded(child: _Tab(label: 'Edit', active: !_showPreview, onTap: () => setState(() => _showPreview = false))),
-              Expanded(child: _Tab(label: 'Preview', active: _showPreview, onTap: () => setState(() => _showPreview = true))),
+              Expanded(child: _Tab(label: 'Bearbeiten', active: !_showPreview, onTap: () => setState(() => _showPreview = false))),
+              Expanded(child: _Tab(label: 'Vorschau', active: _showPreview, onTap: () => setState(() => _showPreview = true))),
             ],
           ),
         ),
         Expanded(
           child: _showPreview
-              ? _Preview(content: widget.ctrl.text)
-              : _Editor(ctrl: widget.ctrl, onChanged: widget.onChanged),
+              ? _PreviewPane(content: widget.ctrl.text)
+              : _EditorPane(ctrl: widget.ctrl, onChanged: widget.onChanged),
         ),
       ],
     );
@@ -209,22 +280,6 @@ class _Tab extends StatelessWidget {
             color: active ? AppColors.primary : AppColors.outline,
           )),
         ),
-      ),
-    );
-  }
-}
-
-class _Preview extends StatelessWidget {
-  const _Preview({required this.content});
-  final String content;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 800),
-        child: ObsidianPreview(content: content),
       ),
     );
   }
