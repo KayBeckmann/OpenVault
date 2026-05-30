@@ -284,13 +284,20 @@ class _EditorWrapperState extends State<_EditorWrapper> {
   bool _saving = false;
   bool _dirty = false;
   EditorMode _mode = EditorMode.split;
+  bool _syncScroll = false;
+  bool _syncing = false;
+
   late TextEditingController _ctrl;
+  final _editorScroll  = ScrollController();
+  final _previewScroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _ctrl = TextEditingController();
     _loadFile();
+    _editorScroll.addListener(_onEditorScroll);
+    _previewScroll.addListener(_onPreviewScroll);
   }
 
   @override
@@ -301,8 +308,26 @@ class _EditorWrapperState extends State<_EditorWrapper> {
 
   @override
   void dispose() {
+    _editorScroll.removeListener(_onEditorScroll);
+    _previewScroll.removeListener(_onPreviewScroll);
+    _editorScroll.dispose();
+    _previewScroll.dispose();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _onEditorScroll() => _sync(_editorScroll, _previewScroll);
+  void _onPreviewScroll() => _sync(_previewScroll, _editorScroll);
+
+  void _sync(ScrollController source, ScrollController target) {
+    if (!_syncScroll || _syncing) return;
+    if (!source.hasClients || !target.hasClients) return;
+    final srcMax = source.position.maxScrollExtent;
+    final tgtMax = target.position.maxScrollExtent;
+    if (srcMax <= 0 || tgtMax <= 0) return;
+    _syncing = true;
+    target.jumpTo((source.offset / srcMax) * tgtMax);
+    _syncing = false;
   }
 
   Future<void> _loadFile() async {
@@ -387,6 +412,22 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                   decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
                 ),
               _ModeButtons(current: _mode, onSelect: (m) => setState(() => _mode = m)),
+              if (_mode == EditorMode.split)
+                Tooltip(
+                  message: _syncScroll ? 'Scroll-Kopplung aktiv' : 'Scroll-Kopplung inaktiv',
+                  child: InkWell(
+                    onTap: () => setState(() => _syncScroll = !_syncScroll),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Icon(
+                        Icons.swap_vert,
+                        size: 16,
+                        color: _syncScroll ? AppColors.primary : AppColors.outline,
+                      ),
+                    ),
+                  ),
+                ),
               if (_mode != EditorMode.preview)
                 IconButton(
                   icon: _saving
@@ -411,6 +452,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                   final editPane = _EditPaneWithToolbar(
                     ctrl: _ctrl,
                     vaultId: widget.vaultId,
+                    scrollController: _editorScroll,
                     onChanged: () => setState(() => _dirty = true),
                   );
                   if (!isWide || _mode == EditorMode.edit) return editPane;
@@ -423,6 +465,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                     Container(width: 1, color: AppColors.outlineVariant),
                     Expanded(child: _ReadPane(
                       content: _ctrl.text,
+                      scrollController: _previewScroll,
                       onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
                     )),
                   ]);
@@ -515,10 +558,11 @@ class _ModeBtn extends StatelessWidget {
 }
 
 class _EditPaneWithToolbar extends StatelessWidget {
-  const _EditPaneWithToolbar({required this.ctrl, required this.vaultId, required this.onChanged});
+  const _EditPaneWithToolbar({required this.ctrl, required this.vaultId, required this.onChanged, this.scrollController});
   final TextEditingController ctrl;
   final String vaultId;
   final VoidCallback onChanged;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -526,16 +570,17 @@ class _EditPaneWithToolbar extends StatelessWidget {
       children: [
         EditorToolbar(ctrl: ctrl, vaultId: vaultId, onChanged: onChanged),
         Container(height: 1, color: AppColors.outlineVariant),
-        Expanded(child: _EditPane(ctrl: ctrl, onChanged: onChanged)),
+        Expanded(child: _EditPane(ctrl: ctrl, onChanged: onChanged, scrollController: scrollController)),
       ],
     );
   }
 }
 
 class _EditPane extends StatefulWidget {
-  const _EditPane({required this.ctrl, required this.onChanged});
+  const _EditPane({required this.ctrl, required this.onChanged, this.scrollController});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
+  final ScrollController? scrollController;
 
   @override
   State<_EditPane> createState() => _EditPaneState();
@@ -549,6 +594,7 @@ class _EditPaneState extends State<_EditPane> {
       padding: const EdgeInsets.all(16),
       child: TextField(
         controller: widget.ctrl,
+        scrollController: widget.scrollController,
         onChanged: _handleChange,
         maxLines: null, expands: true,
         style: GoogleFonts.jetBrainsMono(fontSize: 13, height: 1.6, color: AppColors.onSurface),
@@ -624,15 +670,17 @@ class _EditPaneState extends State<_EditPane> {
 }
 
 class _ReadPane extends StatelessWidget {
-  const _ReadPane({required this.content, this.onToggleCheckbox});
+  const _ReadPane({required this.content, this.onToggleCheckbox, this.scrollController});
   final String content;
   final void Function(int, bool)? onToggleCheckbox;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.background,
       child: SingleChildScrollView(
+        controller: scrollController,
         padding: const EdgeInsets.all(24),
         child: Center(
           child: ConstrainedBox(
