@@ -515,19 +515,24 @@ class _EditPaneWithToolbar extends StatelessWidget {
   }
 }
 
-class _EditPane extends StatelessWidget {
+class _EditPane extends StatefulWidget {
   const _EditPane({required this.ctrl, required this.onChanged});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
 
+  @override
+  State<_EditPane> createState() => _EditPaneState();
+}
+
+class _EditPaneState extends State<_EditPane> {
   @override
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.background,
       padding: const EdgeInsets.all(16),
       child: TextField(
-        controller: ctrl,
-        onChanged: (_) => onChanged(),
+        controller: widget.ctrl,
+        onChanged: _handleChange,
         maxLines: null, expands: true,
         style: GoogleFonts.jetBrainsMono(fontSize: 13, height: 1.6, color: AppColors.onSurface),
         decoration: InputDecoration(
@@ -540,6 +545,64 @@ class _EditPane extends StatelessWidget {
         keyboardType: TextInputType.multiline,
       ),
     );
+  }
+
+  void _handleChange(String newText) {
+    widget.onChanged();
+    _continueListIfNeeded(newText);
+  }
+
+  void _continueListIfNeeded(String newText) {
+    final sel = widget.ctrl.selection;
+    if (!sel.isCollapsed || sel.start < 1) return;
+    final pos = sel.start;
+    // Detect freshly inserted newline
+    if (pos < 1 || newText[pos - 1] != '\n') return;
+
+    final lineStart = newText.lastIndexOf('\n', pos - 2) + 1;
+    final prevLine = newText.substring(lineStart, pos - 1);
+    final prefix = _listPrefix(prevLine);
+    if (prefix == null) return;
+
+    // Empty list item → exit list (remove prefix from prev line)
+    if (prevLine.trim() == prefix.trim()) {
+      final fixed = newText.replaceRange(lineStart, pos - 1, '');
+      widget.ctrl.value = TextEditingValue(
+        text: fixed,
+        selection: TextSelection.collapsed(offset: lineStart),
+      );
+      return;
+    }
+
+    // Insert prefix on new line
+    final fixed = newText.substring(0, pos) + prefix + newText.substring(pos);
+    widget.ctrl.value = TextEditingValue(
+      text: fixed,
+      selection: TextSelection.collapsed(offset: pos + prefix.length),
+    );
+  }
+
+  /// Returns the list prefix to continue, or null if line is not a list item.
+  String? _listPrefix(String line) {
+    // Checkbox: - [ ] or - [x]  (must check before plain bullet)
+    final cbMatch = RegExp(r'^(\s*)-\s+\[[ xX]\]\s+').firstMatch(line);
+    if (cbMatch != null) {
+      return '${RegExp(r'^\s*').firstMatch(line)!.group(0)!}- [ ] ';
+    }
+    // Numbered list: 1. 2. etc.
+    final numMatch = RegExp(r'^(\s*)(\d+)\.\s+').firstMatch(line);
+    if (numMatch != null) {
+      final n = int.parse(numMatch.group(2)!);
+      return '${numMatch.group(1)!}${n + 1}. ';
+    }
+    // Bullet list: - * +
+    final bulletMatch = RegExp(r'^(\s*)([-*+])\s+').firstMatch(line);
+    if (bulletMatch != null) {
+      return '${bulletMatch.group(1)!}${bulletMatch.group(2)!} ';
+    }
+    // Blockquote
+    if (line.startsWith('> ')) return '> ';
+    return null;
   }
 }
 

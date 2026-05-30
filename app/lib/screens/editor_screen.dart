@@ -136,36 +136,41 @@ class _EditorScreenState extends State<EditorScreen> {
 
 // ── Editor pane ───────────────────────────────────────────────────────────────
 
-class _EditorPane extends StatelessWidget {
+class _EditorPane extends StatefulWidget {
   const _EditorPane({required this.ctrl, required this.onChanged, required this.vaultId});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
   final String vaultId;
 
   @override
+  State<_EditorPane> createState() => _EditorPaneState();
+}
+
+class _EditorPaneState extends State<_EditorPane> {
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        EditorToolbar(ctrl: ctrl, vaultId: vaultId, onChanged: onChanged),
+        EditorToolbar(ctrl: widget.ctrl, vaultId: widget.vaultId, onChanged: widget.onChanged),
         Container(height: 1, color: AppColors.outlineVariant),
         Expanded(
           child: Container(
             color: AppColors.background,
             padding: const EdgeInsets.all(24),
             child: TextField(
-        controller: ctrl,
-        onChanged: (_) => onChanged(),
-        maxLines: null,
-        expands: true,
-        style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.6, color: AppColors.onSurface),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          filled: false,
-          hintText: 'Hier schreiben…',
-          hintStyle: GoogleFonts.jetBrainsMono(color: AppColors.outline),
-        ),
+              controller: widget.ctrl,
+              onChanged: _handleChange,
+              maxLines: null,
+              expands: true,
+              style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.6, color: AppColors.onSurface),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                filled: false,
+                hintText: 'Hier schreiben…',
+                hintStyle: GoogleFonts.jetBrainsMono(color: AppColors.outline),
+              ),
               cursorColor: AppColors.primary,
               keyboardType: TextInputType.multiline,
             ),
@@ -173,6 +178,49 @@ class _EditorPane extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  void _handleChange(String newText) {
+    widget.onChanged();
+    _continueListIfNeeded(newText);
+  }
+
+  void _continueListIfNeeded(String newText) {
+    final sel = widget.ctrl.selection;
+    if (!sel.isCollapsed || sel.start < 1) return;
+    final pos = sel.start;
+    if (pos < 1 || newText[pos - 1] != '\n') return;
+
+    final lineStart = newText.lastIndexOf('\n', pos - 2) + 1;
+    final prevLine = newText.substring(lineStart, pos - 1);
+    final prefix = _listPrefix(prevLine);
+    if (prefix == null) return;
+
+    if (prevLine.trim() == prefix.trim()) {
+      final fixed = newText.replaceRange(lineStart, pos - 1, '');
+      widget.ctrl.value = TextEditingValue(
+        text: fixed,
+        selection: TextSelection.collapsed(offset: lineStart),
+      );
+      return;
+    }
+
+    final fixed = newText.substring(0, pos) + prefix + newText.substring(pos);
+    widget.ctrl.value = TextEditingValue(
+      text: fixed,
+      selection: TextSelection.collapsed(offset: pos + prefix.length),
+    );
+  }
+
+  String? _listPrefix(String line) {
+    final cbMatch = RegExp(r'^(\s*)-\s+\[[ xX]\]\s+').firstMatch(line);
+    if (cbMatch != null) return '${RegExp(r'^\s*').firstMatch(line)!.group(0)!}- [ ] ';
+    final numMatch = RegExp(r'^(\s*)(\d+)\.\s+').firstMatch(line);
+    if (numMatch != null) return '${numMatch.group(1)!}${int.parse(numMatch.group(2)!) + 1}. ';
+    final bulletMatch = RegExp(r'^(\s*)([-*+])\s+').firstMatch(line);
+    if (bulletMatch != null) return '${bulletMatch.group(1)!}${bulletMatch.group(2)!} ';
+    if (line.startsWith('> ')) return '> ';
+    return null;
   }
 }
 
