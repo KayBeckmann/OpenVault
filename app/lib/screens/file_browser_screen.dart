@@ -14,12 +14,18 @@ class FileBrowserScreen extends StatefulWidget {
     this.vaultId,
     this.localPath,
     required this.vaultName,
+    this.remoteUrl,
+    this.sshKeyPath,
+    this.nativeAutoPushOnClose = false,
   }) : assert(vaultId != null || localPath != null,
             'Entweder vaultId (Web) oder localPath (nativ) muss gesetzt sein.');
 
   final String? vaultId;
   final String? localPath;
   final String vaultName;
+  final String? remoteUrl;
+  final String? sshKeyPath;
+  final bool nativeAutoPushOnClose;
 
   @override
   State<FileBrowserScreen> createState() => _FileBrowserScreenState();
@@ -43,12 +49,32 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.localPath != null) {
+      _autoPushOnClose = widget.nativeAutoPushOnClose;
+    }
     _loadSettings();
     _pullAndLoad();
   }
 
   Future<void> _pullAndLoad() async {
     if (widget.localPath != null) {
+      final hasRemote = widget.remoteUrl != null && widget.remoteUrl!.isNotEmpty;
+      if (hasRemote) {
+        setState(() => _working = true);
+        final result = await LocalVaultService.pullRepo(
+          widget.localPath!,
+          sshKeyPath: widget.sshKeyPath,
+        );
+        if (mounted) {
+          setState(() => _working = false);
+          if (!result.success && result.output.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Pull: ${result.output}'),
+              duration: const Duration(seconds: 4),
+            ));
+          }
+        }
+      }
       await _loadTree();
       return;
     }
@@ -56,6 +82,53 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       await ApiClient().post('/api/vaults/${widget.vaultId}/pull', {});
     } catch (_) {}
     await _loadTree();
+  }
+
+  Future<void> _manualSync() async {
+    if (widget.localPath == null) return;
+    final hasRemote = widget.remoteUrl != null && widget.remoteUrl!.isNotEmpty;
+    if (!hasRemote) return;
+    setState(() => _working = true);
+    try {
+      final pullResult = await LocalVaultService.pullRepo(
+        widget.localPath!,
+        sshKeyPath: widget.sshKeyPath,
+      );
+      if (mounted && !pullResult.success) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Pull fehlgeschlagen: ${pullResult.output}'),
+          backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 5),
+        ));
+        setState(() => _working = false);
+        return;
+      }
+      final now = DateTime.now();
+      final ts = '${now.year}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')} '
+          '${now.hour.toString().padLeft(2, '0')}:'
+          '${now.minute.toString().padLeft(2, '0')}';
+      final pushResult = await LocalVaultService.commitAndPushRepo(
+        widget.localPath!,
+        'Sync $ts (OpenVault)',
+        sshKeyPath: widget.sshKeyPath,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(pushResult.success ? 'Sync erfolgreich' : 'Push fehlgeschlagen: ${pushResult.output}'),
+          backgroundColor: pushResult.success ? null : AppColors.error,
+        ));
+        await _loadTree();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Sync-Fehler: $e'),
+        backgroundColor: AppColors.error,
+      ));
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -140,7 +213,37 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   }
 
   Future<void> _closeVault() async {
-    if (widget.localPath == null && _autoPushOnClose) {
+    if (widget.localPath != null) {
+      final hasRemote = widget.remoteUrl != null && widget.remoteUrl!.isNotEmpty;
+      if (_autoPushOnClose && hasRemote) {
+        setState(() => _working = true);
+        try {
+          final now = DateTime.now();
+          final ts = '${now.year}-'
+              '${now.month.toString().padLeft(2, '0')}-'
+              '${now.day.toString().padLeft(2, '0')} '
+              '${now.hour.toString().padLeft(2, '0')}:'
+              '${now.minute.toString().padLeft(2, '0')}';
+          final result = await LocalVaultService.commitAndPushRepo(
+            widget.localPath!,
+            'Auto-commit $ts (OpenVault)',
+            sshKeyPath: widget.sshKeyPath,
+          );
+          if (mounted && !result.success) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Push fehlgeschlagen: ${result.output}'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 5),
+            ));
+          }
+        } catch (_) {} finally {
+          if (mounted) setState(() => _working = false);
+        }
+      }
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    if (_autoPushOnClose) {
       setState(() { _working = true; });
       try {
         final now = DateTime.now();
@@ -241,6 +344,12 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               )),
             ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTree, tooltip: 'Aktualisieren'),
+          if (widget.localPath != null && widget.remoteUrl != null)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              tooltip: 'Jetzt synchronisieren',
+              onPressed: _working ? null : _manualSync,
+            ),
           IconButton(
             icon: _working
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))

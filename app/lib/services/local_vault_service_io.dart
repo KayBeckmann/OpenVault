@@ -145,6 +145,76 @@ class LocalVaultService {
     } catch (_) {}
   }
 
+  static Future<void> setVaultProperty(String id, String key, dynamic value) async {
+    final vaults = await loadVaults();
+    final idx = vaults.indexWhere((v) => v['id'] == id);
+    if (idx < 0) return;
+    vaults[idx][key] = value;
+    await _save(vaults);
+  }
+
+  // ── Git operations ──────────────────────────────────────────────────────────
+
+  static Map<String, String> _gitEnv({String? sshKeyPath}) => {
+    ...Platform.environment,
+    'GIT_TERMINAL_PROMPT': '0',
+    if (sshKeyPath != null)
+      'GIT_SSH_COMMAND':
+          'ssh -i "$sshKeyPath" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes',
+  };
+
+  static Future<bool> _gitAvailable() async {
+    try {
+      final r = await Process.run('git', ['--version']);
+      return r.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<({bool success, String output})> pullRepo(
+    String repoPath, {
+    String? sshKeyPath,
+  }) async {
+    if (Platform.isAndroid && !await _gitAvailable()) {
+      return (
+        success: false,
+        output: 'git nicht verfügbar. Installiere Termux + git für Android-Sync.',
+      );
+    }
+    final r = await Process.run(
+      'git', ['-C', repoPath, 'pull'],
+      environment: _gitEnv(sshKeyPath: sshKeyPath),
+    );
+    return (success: r.exitCode == 0, output: '${r.stdout}${r.stderr}'.trim());
+  }
+
+  static Future<({bool success, String output})> commitAndPushRepo(
+    String repoPath,
+    String message, {
+    String? sshKeyPath,
+  }) async {
+    if (Platform.isAndroid && !await _gitAvailable()) {
+      return (
+        success: false,
+        output: 'git nicht verfügbar. Installiere Termux + git für Android-Sync.',
+      );
+    }
+    final env = _gitEnv(sshKeyPath: sshKeyPath);
+    // Stage all changes
+    var r = await Process.run('git', ['-C', repoPath, 'add', '-A'], environment: env);
+    if (r.exitCode != 0) return (success: false, output: '${r.stderr}'.trim());
+    // Commit (ignore "nothing to commit" — still try push)
+    r = await Process.run('git', ['-C', repoPath, 'commit', '-m', message], environment: env);
+    final commitOut = '${r.stdout}${r.stderr}'.trim();
+    if (r.exitCode != 0 && !commitOut.toLowerCase().contains('nothing to commit')) {
+      return (success: false, output: commitOut);
+    }
+    // Push
+    r = await Process.run('git', ['-C', repoPath, 'push'], environment: env);
+    return (success: r.exitCode == 0, output: '${r.stdout}${r.stderr}'.trim());
+  }
+
   static Future<({bool success, String output})> cloneRepo(
     String url,
     String destPath, {

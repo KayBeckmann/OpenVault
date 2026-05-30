@@ -127,11 +127,22 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
     if (mounted) setState(() => _vaults.removeWhere((v) => v['id'] == id));
   }
 
+  Future<void> _toggleAutoPush(String id, bool value) async {
+    await LocalVaultService.setVaultProperty(id, 'autoPushOnClose', value);
+    final idx = _vaults.indexWhere((v) => v['id'] == id);
+    if (idx >= 0 && mounted) {
+      setState(() => _vaults[idx]['autoPushOnClose'] = value);
+    }
+  }
+
   void _openVault(Map<String, dynamic> vault) {
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => FileBrowserScreen(
         localPath: vault['localPath'] as String,
         vaultName: vault['name'] as String? ?? 'Vault',
+        remoteUrl: vault['remoteUrl'] as String?,
+        sshKeyPath: _sshKey?.privateKeyPath,
+        nativeAutoPushOnClose: vault['autoPushOnClose'] as bool? ?? false,
       ),
     ));
   }
@@ -178,7 +189,12 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _vaults.isEmpty
                     ? _EmptyState(onAdd: _showAddDialog)
-                    : _VaultList(vaults: _vaults, onOpen: _openVault, onRemove: _removeVault),
+                    : _VaultList(
+                        vaults: _vaults,
+                        onOpen: _openVault,
+                        onRemove: _removeVault,
+                        onToggleAutoPush: _toggleAutoPush,
+                      ),
           ),
         ],
       ),
@@ -397,10 +413,16 @@ class _EmptyState extends StatelessWidget {
 // ── Vault list ────────────────────────────────────────────────────────────────
 
 class _VaultList extends StatelessWidget {
-  const _VaultList({required this.vaults, required this.onOpen, required this.onRemove});
+  const _VaultList({
+    required this.vaults,
+    required this.onOpen,
+    required this.onRemove,
+    required this.onToggleAutoPush,
+  });
   final List<Map<String, dynamic>> vaults;
   final void Function(Map<String, dynamic>) onOpen;
   final Future<void> Function(String) onRemove;
+  final void Function(String id, bool value) onToggleAutoPush;
 
   @override
   Widget build(BuildContext context) {
@@ -412,6 +434,7 @@ class _VaultList extends StatelessWidget {
                 vault: v,
                 onOpen: () => onOpen(v),
                 onRemove: () => onRemove(v['id'] as String),
+                onToggleAutoPush: (val) => onToggleAutoPush(v['id'] as String, val),
               ))
           .toList(),
     );
@@ -419,13 +442,22 @@ class _VaultList extends StatelessWidget {
 }
 
 class _VaultCard extends StatelessWidget {
-  const _VaultCard({super.key, required this.vault, required this.onOpen, required this.onRemove});
+  const _VaultCard({
+    super.key,
+    required this.vault,
+    required this.onOpen,
+    required this.onRemove,
+    required this.onToggleAutoPush,
+  });
   final Map<String, dynamic> vault;
   final VoidCallback onOpen;
   final VoidCallback onRemove;
+  final void Function(bool) onToggleAutoPush;
 
   @override
   Widget build(BuildContext context) {
+    final hasRemote = vault['remoteUrl'] != null;
+    final autoPush = vault['autoPushOnClose'] as bool? ?? false;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -456,7 +488,7 @@ class _VaultCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(vault['localPath'] as String? ?? '',
               style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline)),
-          if (vault['remoteUrl'] != null) ...[
+          if (hasRemote) ...[
             const SizedBox(height: 2),
             Row(children: [
               const Icon(Icons.link, size: 12, color: AppColors.onSurfaceVariant),
@@ -465,6 +497,19 @@ class _VaultCard extends StatelessWidget {
                 child: Text(vault['remoteUrl'] as String,
                     style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant),
                     overflow: TextOverflow.ellipsis),
+              ),
+            ]),
+            const SizedBox(height: 6),
+            Row(children: [
+              const Icon(Icons.sync, size: 12, color: AppColors.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text('Auto-Sync beim Schließen',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+              const Spacer(),
+              Switch(
+                value: autoPush,
+                onChanged: onToggleAutoPush,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ]),
           ],

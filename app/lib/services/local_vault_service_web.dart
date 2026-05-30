@@ -18,4 +18,11 @@ class LocalVaultService {
   static Future<({bool success, String output})> cloneRepo(
           String url, String destPath, {String? sshKeyPath}) async =>
       (success: false, output: 'Not supported on web');
+  static Future<void> setVaultProperty(String id, String key, dynamic value) async {}
+  static Future<({bool success, String output})> pullRepo(
+          String repoPath, {String? sshKeyPath}) async =>
+      (success: false, output: 'Not supported on web');
+  static Future<({bool success, String output})> commitAndPushRepo(
+          String repoPath, String message, {String? sshKeyPath}) async =>
+      (success: false, output: 'Not supported on web');
 }
