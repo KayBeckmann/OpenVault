@@ -192,6 +192,32 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
     setState(() => _activeFilePath = path);
   }
 
+  void _resolveAndOpenWikilink(String target) {
+    // target = wikilink text without [[ ]], e.g. "Dateiname" or "Ordner/Datei"
+    final path = _findFileByName(_tree, target);
+    if (path != null) {
+      _openFile(path);
+    }
+  }
+
+  String? _findFileByName(List nodes, String target) {
+    final t = target.toLowerCase().replaceAll('.md', '');
+    for (final n in nodes) {
+      if (n['type'] == 'file') {
+        final path = n['path'] as String;
+        final name = path.split('/').last.replaceAll('.md', '').toLowerCase();
+        // Match by filename OR by full relative path
+        if (name == t || path.toLowerCase().replaceAll('.md', '') == t) {
+          return path;
+        }
+      } else if (n['type'] == 'folder') {
+        final r = _findFileByName(n['children'] as List? ?? [], target);
+        if (r != null) return r;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -236,6 +262,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                 localPath: widget.localPath,
                 filePath: _activeFilePath!,
                 onBack: () => setState(() => _activeFilePath = null),
+                onWikilink: _resolveAndOpenWikilink,
               );
             }
             return _SidebarContent(
@@ -287,7 +314,12 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               if (_sidebarOpen) Container(width: 1, color: AppColors.outlineVariant),
               Expanded(
                 child: _activeFilePath != null
-                    ? _EditorWrapper(vaultId: widget.vaultId, localPath: widget.localPath, filePath: _activeFilePath!)
+                    ? _EditorWrapper(
+                        vaultId: widget.vaultId,
+                        localPath: widget.localPath,
+                        filePath: _activeFilePath!,
+                        onWikilink: _resolveAndOpenWikilink,
+                      )
                     : _EmptyEditor(onCreateFile: () => _createFile('')),
               ),
             ],
@@ -301,11 +333,12 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
 // ── Editor wrapper (inline, no separate route on desktop) ─────────────────────
 
 class _EditorWrapper extends StatefulWidget {
-  const _EditorWrapper({required this.vaultId, this.localPath, required this.filePath, this.onBack});
+  const _EditorWrapper({required this.vaultId, this.localPath, required this.filePath, this.onBack, this.onWikilink});
   final String? vaultId;
   final String? localPath;
   final String filePath;
   final VoidCallback? onBack;
+  final void Function(String)? onWikilink;
 
   @override
   State<_EditorWrapper> createState() => _EditorWrapperState();
@@ -499,6 +532,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                   if (_mode == EditorMode.preview) return _ReadPane(
                     content: _ctrl.text,
                     onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
+                    onWikilink: widget.onWikilink,
                   );
                   return Row(children: [
                     Expanded(child: editPane),
@@ -507,6 +541,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                       content: _ctrl.text,
                       scrollController: _previewScroll,
                       onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
+                      onWikilink: widget.onWikilink,
                     )),
                   ]);
                 }),
@@ -711,9 +746,10 @@ class _EditPaneState extends State<_EditPane> {
 }
 
 class _ReadPane extends StatelessWidget {
-  const _ReadPane({required this.content, this.onToggleCheckbox, this.scrollController});
+  const _ReadPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController});
   final String content;
   final void Function(int, bool)? onToggleCheckbox;
+  final void Function(String)? onWikilink;
   final ScrollController? scrollController;
 
   @override
@@ -729,6 +765,7 @@ class _ReadPane extends StatelessWidget {
             child: ObsidianPreview(
               content: content,
               onToggleCheckbox: onToggleCheckbox,
+              onWikilink: onWikilink,
             ),
           ),
         ),

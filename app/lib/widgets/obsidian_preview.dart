@@ -178,7 +178,7 @@ class _MarkdownBody extends StatelessWidget {
         for (final line in chunkLines) {
           if (line.contains('WIKILINK:') || line.contains('TAG:')) {
             flushPlain();
-            widgets.add(_InlineRich(line: line));
+            widgets.add(_InlineRich(line: line, onWikilink: onWikilink));
           } else {
             plain.add(line);
           }
@@ -455,8 +455,9 @@ class _HighlightBlock extends StatelessWidget {
 // ── Inline rich text (Wikilinks + Tags) ──────────────────────────────────────
 
 class _InlineRich extends StatelessWidget {
-  const _InlineRich({required this.line});
+  const _InlineRich({required this.line, this.onWikilink});
   final String line;
+  final void Function(String target)? onWikilink;
 
   @override
   Widget build(BuildContext context) {
@@ -474,10 +475,27 @@ class _InlineRich extends StatelessWidget {
         ));
       }
       if (match.group(1) != null) {
-        final display = match.group(3) ?? match.group(2) ?? '';
-        spans.add(TextSpan(
-          text: '[[$display]]',
-          style: GoogleFonts.inter(fontSize: 15, color: AppColors.primary, decoration: TextDecoration.underline),
+        final target  = match.group(2) ?? '';
+        final display = match.group(3) ?? target;
+        final cb = onWikilink;
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: GestureDetector(
+            onTap: cb != null ? () => cb(target) : null,
+            child: MouseRegion(
+              cursor: cb != null ? SystemMouseCursors.click : MouseCursor.defer,
+              child: Text(
+                '[[$display]]',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  color: AppColors.primary,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
         ));
       } else if (match.group(4) != null) {
         spans.add(WidgetSpan(

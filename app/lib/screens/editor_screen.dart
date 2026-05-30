@@ -98,6 +98,27 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  Future<void> _openWikilink(String target) async {
+    // Search vault for a file matching the wikilink target name
+    try {
+      final results = await ApiClient().getList(
+        '/api/files/${widget.vaultId}/search?q=${Uri.encodeQueryComponent(target)}',
+      );
+      final t = target.toLowerCase().replaceAll('.md', '');
+      final match = results.firstWhere(
+        (r) => (r['path'] as String).split('/').last.replaceAll('.md', '').toLowerCase() == t,
+        orElse: () => results.isEmpty ? {} : results.first,
+      );
+      final path = match['path'] as String?;
+      if (path != null && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => EditorScreen(vaultId: widget.vaultId, filePath: path)),
+        );
+      }
+    } catch (_) {}
+  }
+
   void _toggleCheckbox(int idx, bool checked) {
     final text = _ctrl.text;
     final matches = RegExp(r'\[[ xX]\]', caseSensitive: false).allMatches(text).toList();
@@ -181,10 +202,11 @@ class _EditorScreenState extends State<EditorScreen> {
                         content: _ctrl.text,
                         scrollController: _previewScroll,
                         onToggleCheckbox: _toggleCheckbox,
+                        onWikilink: _openWikilink,
                       )),
                     ]),
                   EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true)),
-                  EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox),
+                  EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink),
                 };
               },
             ),
@@ -288,9 +310,10 @@ class _EditorPaneState extends State<_EditorPane> {
 // ── Preview pane ──────────────────────────────────────────────────────────────
 
 class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.content, this.onToggleCheckbox, this.scrollController});
+  const _PreviewPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController});
   final String content;
   final void Function(int, bool)? onToggleCheckbox;
+  final void Function(String)? onWikilink;
   final ScrollController? scrollController;
 
   @override
@@ -306,6 +329,7 @@ class _PreviewPane extends StatelessWidget {
             child: ObsidianPreview(
               content: content,
               onToggleCheckbox: onToggleCheckbox,
+              onWikilink: onWikilink,
             ),
           ),
         ),
