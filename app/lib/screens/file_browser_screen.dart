@@ -2,15 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../services/local_vault_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/obsidian_preview.dart';
 import 'editor_screen.dart';
 import 'tags_screen.dart';
 
 class FileBrowserScreen extends StatefulWidget {
-  const FileBrowserScreen({super.key, required this.vaultId, required this.vaultName});
+  const FileBrowserScreen({
+    super.key,
+    this.vaultId,
+    this.localPath,
+    required this.vaultName,
+  }) : assert(vaultId != null || localPath != null,
+            'Entweder vaultId (Web) oder localPath (nativ) muss gesetzt sein.');
 
-  final String vaultId;
+  final String? vaultId;
+  final String? localPath;
   final String vaultName;
 
   @override
@@ -40,16 +48,18 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   }
 
   Future<void> _pullAndLoad() async {
-    // Silently pull latest changes on open, then load the tree
+    if (widget.localPath != null) {
+      await _loadTree();
+      return;
+    }
     try {
       await ApiClient().post('/api/vaults/${widget.vaultId}/pull', {});
-    } catch (_) {
-      // Pull errors are non-fatal (e.g. offline, no remote) — just load the local tree
-    }
+    } catch (_) {}
     await _loadTree();
   }
 
   Future<void> _loadSettings() async {
+    if (widget.localPath != null) return;
     try {
       final s = await ApiClient().get('/api/settings/${widget.vaultId}');
       if (mounted) setState(() {
@@ -69,10 +79,17 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   Future<void> _loadTree() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final result = await ApiClient().get('/api/files/${widget.vaultId}/tree');
-      setState(() { _tree = result['children'] as List? ?? []; });
+      if (widget.localPath != null) {
+        final tree = LocalVaultService.buildTree(widget.localPath!);
+        setState(() { _tree = tree; });
+      } else {
+        final result = await ApiClient().get('/api/files/${widget.vaultId}/tree');
+        setState(() { _tree = result['children'] as List? ?? []; });
+      }
     } on ApiException catch (e) {
       setState(() { _error = e.message; });
+    } catch (e) {
+      setState(() { _error = e.toString(); });
     } finally {
       if (mounted) setState(() { _loading = false; });
     }
@@ -84,11 +101,16 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       return;
     }
     try {
-      final results = await ApiClient().getList(
-        '/api/files/${widget.vaultId}/search?q=${Uri.encodeQueryComponent(query)}',
-      );
-      setState(() { _searchResults = results; });
-    } on ApiException catch (_) {
+      if (widget.localPath != null) {
+        final results = LocalVaultService.searchFiles(widget.localPath!, query);
+        setState(() { _searchResults = results; });
+      } else {
+        final results = await ApiClient().getList(
+          '/api/files/${widget.vaultId}/search?q=${Uri.encodeQueryComponent(query)}',
+        );
+        setState(() { _searchResults = results; });
+      }
+    } catch (_) {
       setState(() { _searchResults = []; });
     }
   }
@@ -99,21 +121,26 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       context: context,
       builder: (ctx) => _NewFileDialog(
         vaultId: widget.vaultId,
+        localPath: widget.localPath,
         effectiveParent: effectiveParent,
         templateFolder: _templateFolder,
       ),
     );
     if (result == null) return;
-    await ApiClient().put('/api/files/${widget.vaultId}/file', {
-      'path': result.path,
-      'content': result.content,
-    });
+    if (widget.localPath != null) {
+      LocalVaultService.writeFile(widget.localPath!, result.path, result.content);
+    } else {
+      await ApiClient().put('/api/files/${widget.vaultId}/file', {
+        'path': result.path,
+        'content': result.content,
+      });
+    }
     await _loadTree();
     _openFile(result.path);
   }
 
   Future<void> _closeVault() async {
-    if (_autoPushOnClose) {
+    if (widget.localPath == null && _autoPushOnClose) {
       setState(() { _working = true; });
       try {
         final now = DateTime.now();
@@ -125,9 +152,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
         await ApiClient().post('/api/vaults/${widget.vaultId}/push', {
           'commitMessage': 'Auto-commit $ts (OpenVault)',
         });
-      } catch (_) {
-        // Fehler beim Push ignorieren — Vault trotzdem schließen
-      } finally {
+      } catch (_) {} finally {
         if (mounted) setState(() { _working = false; });
       }
     }
@@ -154,7 +179,11 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       ),
     );
     if (confirmed != true) return;
-    await ApiClient().delete('/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(path)}');
+    if (widget.localPath != null) {
+      LocalVaultService.deleteFile(widget.localPath!, path);
+    } else {
+      await ApiClient().delete('/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(path)}');
+    }
     if (_activeFilePath == path) setState(() => _activeFilePath = null);
     await _loadTree();
   }
@@ -177,13 +206,14 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
         ),
         actions: [
           IconButton(icon: const Icon(Icons.add), onPressed: () => _createFile(''), tooltip: 'Neue Datei'),
-          IconButton(
-            icon: const Icon(Icons.label_outline),
-            tooltip: 'Tags',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => TagsScreen(vaultId: widget.vaultId, vaultName: widget.vaultName),
-            )),
-          ),
+          if (widget.vaultId != null)
+            IconButton(
+              icon: const Icon(Icons.label_outline),
+              tooltip: 'Tags',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => TagsScreen(vaultId: widget.vaultId!, vaultName: widget.vaultName),
+              )),
+            ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTree, tooltip: 'Aktualisieren'),
           IconButton(
             icon: _working
@@ -203,6 +233,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
             if (_activeFilePath != null) {
               return _EditorWrapper(
                 vaultId: widget.vaultId,
+                localPath: widget.localPath,
                 filePath: _activeFilePath!,
                 onBack: () => setState(() => _activeFilePath = null),
               );
@@ -256,7 +287,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               if (_sidebarOpen) Container(width: 1, color: AppColors.outlineVariant),
               Expanded(
                 child: _activeFilePath != null
-                    ? _EditorWrapper(vaultId: widget.vaultId, filePath: _activeFilePath!)
+                    ? _EditorWrapper(vaultId: widget.vaultId, localPath: widget.localPath, filePath: _activeFilePath!)
                     : _EmptyEditor(onCreateFile: () => _createFile('')),
               ),
             ],
@@ -270,8 +301,9 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
 // ── Editor wrapper (inline, no separate route on desktop) ─────────────────────
 
 class _EditorWrapper extends StatefulWidget {
-  const _EditorWrapper({required this.vaultId, required this.filePath, this.onBack});
-  final String vaultId;
+  const _EditorWrapper({required this.vaultId, this.localPath, required this.filePath, this.onBack});
+  final String? vaultId;
+  final String? localPath;
   final String filePath;
   final VoidCallback? onBack;
 
@@ -333,10 +365,13 @@ class _EditorWrapperState extends State<_EditorWrapper> {
   Future<void> _loadFile() async {
     setState(() { _loading = true; _dirty = false; });
     try {
-      final content = await ApiClient().getRaw(
-        '/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(widget.filePath)}',
-      );
-      _ctrl.text = content;
+      if (widget.localPath != null) {
+        _ctrl.text = LocalVaultService.readFile(widget.localPath!, widget.filePath);
+      } else {
+        _ctrl.text = await ApiClient().getRaw(
+          '/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(widget.filePath)}',
+        );
+      }
     } catch (_) {
       _ctrl.text = '';
     } finally {
@@ -347,10 +382,14 @@ class _EditorWrapperState extends State<_EditorWrapper> {
   Future<void> _save() async {
     setState(() { _saving = true; });
     try {
-      await ApiClient().put('/api/files/${widget.vaultId}/file', {
-        'path': widget.filePath,
-        'content': _ctrl.text,
-      });
+      if (widget.localPath != null) {
+        LocalVaultService.writeFile(widget.localPath!, widget.filePath, _ctrl.text);
+      } else {
+        await ApiClient().put('/api/files/${widget.vaultId}/file', {
+          'path': widget.filePath,
+          'content': _ctrl.text,
+        });
+      }
       setState(() { _dirty = false; });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -452,6 +491,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                   final editPane = _EditPaneWithToolbar(
                     ctrl: _ctrl,
                     vaultId: widget.vaultId,
+                    localPath: widget.localPath,
                     scrollController: _editorScroll,
                     onChanged: () => setState(() => _dirty = true),
                   );
@@ -558,9 +598,10 @@ class _ModeBtn extends StatelessWidget {
 }
 
 class _EditPaneWithToolbar extends StatelessWidget {
-  const _EditPaneWithToolbar({required this.ctrl, required this.vaultId, required this.onChanged, this.scrollController});
+  const _EditPaneWithToolbar({required this.ctrl, this.vaultId, this.localPath, required this.onChanged, this.scrollController});
   final TextEditingController ctrl;
-  final String vaultId;
+  final String? vaultId;
+  final String? localPath;
   final VoidCallback onChanged;
   final ScrollController? scrollController;
 
@@ -568,7 +609,7 @@ class _EditPaneWithToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        EditorToolbar(ctrl: ctrl, vaultId: vaultId, onChanged: onChanged),
+        EditorToolbar(ctrl: ctrl, vaultId: vaultId, localPath: localPath, onChanged: onChanged),
         Container(height: 1, color: AppColors.outlineVariant),
         Expanded(child: _EditPane(ctrl: ctrl, onChanged: onChanged, scrollController: scrollController)),
       ],
@@ -1030,12 +1071,14 @@ class _NodeState extends State<_Node> {
 
 class _NewFileDialog extends StatefulWidget {
   const _NewFileDialog({
-    required this.vaultId,
+    this.vaultId,
+    this.localPath,
     required this.effectiveParent,
     required this.templateFolder,
   });
 
-  final String vaultId;
+  final String? vaultId;
+  final String? localPath;
   final String effectiveParent;
   final String templateFolder;
 
@@ -1063,17 +1106,16 @@ class _NewFileDialogState extends State<_NewFileDialog> {
 
   Future<void> _loadTemplates() async {
     try {
-      // Search for .md files inside the template folder
-      final result = await ApiClient().get(
-        '/api/files/${widget.vaultId}/tree',
-      );
-      final children = result['children'] as List? ?? [];
+      List children;
+      if (widget.localPath != null) {
+        children = LocalVaultService.buildTree(widget.localPath!);
+      } else {
+        final result = await ApiClient().get('/api/files/${widget.vaultId}/tree');
+        children = result['children'] as List? ?? [];
+      }
       final templates = <_Template>[];
       _collectTemplates(children, widget.templateFolder, templates);
-      setState(() {
-        _templates = templates;
-        _loadingTemplates = false;
-      });
+      setState(() { _templates = templates; _loadingTemplates = false; });
     } catch (_) {
       setState(() => _loadingTemplates = false);
     }
@@ -1108,9 +1150,13 @@ class _NewFileDialogState extends State<_NewFileDialog> {
     String content = '';
     if (_selected != null) {
       try {
-        content = await ApiClient().getRaw(
-          '/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(_selected!.path)}',
-        );
+        if (widget.localPath != null) {
+          content = LocalVaultService.readFile(widget.localPath!, _selected!.path);
+        } else {
+          content = await ApiClient().getRaw(
+            '/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(_selected!.path)}',
+          );
+        }
       } catch (_) {
         content = '';
       }

@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../services/local_vault_service.dart';
 
 class EditorToolbar extends StatelessWidget {
   const EditorToolbar({
     super.key,
     required this.ctrl,
-    required this.vaultId,
+    this.vaultId,
+    this.localPath,
     required this.onChanged,
   });
 
   final TextEditingController ctrl;
-  final String vaultId;
+  final String? vaultId;
+  final String? localPath;
   final VoidCallback onChanged;
 
   // ── Text manipulation helpers ─────────────────────────────────────────────
@@ -114,7 +117,7 @@ class EditorToolbar extends StatelessWidget {
   Future<void> _showLinkDialog(BuildContext context) async {
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => _LinkDialog(vaultId: vaultId),
+      builder: (ctx) => const _LinkDialog(),
     );
     if (result != null) _insertAtCursor(result);
   }
@@ -122,7 +125,7 @@ class EditorToolbar extends StatelessWidget {
   Future<void> _showWikilinkDialog(BuildContext context) async {
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => _WikilinkDialog(vaultId: vaultId),
+      builder: (ctx) => _WikilinkDialog(vaultId: vaultId, localPath: localPath),
     );
     if (result != null) _insertAtCursor(result);
   }
@@ -307,8 +310,7 @@ class _HeadingMenu extends StatelessWidget {
 // ── Link Dialog ───────────────────────────────────────────────────────────────
 
 class _LinkDialog extends StatefulWidget {
-  const _LinkDialog({required this.vaultId});
-  final String vaultId;
+  const _LinkDialog();
 
   @override
   State<_LinkDialog> createState() => _LinkDialogState();
@@ -364,8 +366,9 @@ class _LinkDialogState extends State<_LinkDialog> {
 // ── Wikilink Dialog ───────────────────────────────────────────────────────────
 
 class _WikilinkDialog extends StatefulWidget {
-  const _WikilinkDialog({required this.vaultId});
-  final String vaultId;
+  const _WikilinkDialog({this.vaultId, this.localPath});
+  final String? vaultId;
+  final String? localPath;
 
   @override
   State<_WikilinkDialog> createState() => _WikilinkDialogState();
@@ -393,9 +396,13 @@ class _WikilinkDialogState extends State<_WikilinkDialog> {
 
   Future<void> _loadFiles() async {
     try {
-      final result = await ApiClient().get('/api/files/${widget.vaultId}/tree');
       final files = <String>[];
-      _collectFiles(result['children'] as List? ?? [], files);
+      if (widget.localPath != null) {
+        files.addAll(LocalVaultService.collectFilePaths(widget.localPath!));
+      } else if (widget.vaultId != null) {
+        final result = await ApiClient().get('/api/files/${widget.vaultId}/tree');
+        _collectFiles(result['children'] as List? ?? [], files);
+      }
       setState(() {
         _allFiles = files..sort();
         _filtered = List.of(files);
