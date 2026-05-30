@@ -197,7 +197,9 @@ class SshKeyService {
 
   String _encryptPrivateKey(String pem) {
     final envKey = Platform.environment['ENCRYPTION_KEY'] ?? 'dev-key-32-bytes-pad-to-length!!';
-    final keyBytes = Uint8List.fromList(utf8.encode(envKey.padRight(32, '!').substring(0, 32)));
+    final rawEnv = utf8.encode(envKey);
+    final keyBytes = Uint8List(32);
+    for (var i = 0; i < 32; i++) keyBytes[i] = i < rawEnv.length ? rawEnv[i] : 0x21;
     final nonce = _secureBytes(12);
     final params = AEADParameters(KeyParameter(keyBytes), 128, nonce, Uint8List(0));
     final cipher = GCMBlockCipher(AESEngine())..init(true, params);

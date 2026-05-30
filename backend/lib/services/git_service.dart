@@ -217,7 +217,9 @@ class GitService {
     final ciphertext = bytes.sublist(12);
 
     final rawKey = Platform.environment['ENCRYPTION_KEY'] ?? 'dev-key-32-bytes-pad-to-length!!';
-    final keyBytes = Uint8List.fromList(utf8.encode(rawKey.padRight(32, '!').substring(0, 32)));
+    final rawEnv = utf8.encode(rawKey);
+    final keyBytes = Uint8List(32);
+    for (var i = 0; i < 32; i++) keyBytes[i] = i < rawEnv.length ? rawEnv[i] : 0x21;
 
     final params = AEADParameters(KeyParameter(keyBytes), 128, nonce, Uint8List(0));
     final cipher = GCMBlockCipher(AESEngine())..init(false, params);

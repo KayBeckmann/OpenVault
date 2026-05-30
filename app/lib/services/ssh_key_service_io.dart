@@ -32,13 +32,10 @@ class SshKeyService {
     if (Platform.isAndroid) {
       try {
         final ext = await getExternalStorageDirectory();
-        if (ext != null) {
-          final path = ext.path;
-          final idx = path.indexOf('/Android/data/');
-          if (idx > 0) return '${path.substring(0, idx)}/OpenVault';
-        }
+        if (ext != null) return '${ext.path}/vaults';
       } catch (_) {}
-      return '/storage/emulated/0/OpenVault';
+      final dir = await getApplicationSupportDirectory();
+      return '${dir.path}/vaults';
     }
     if (Platform.isWindows) {
       return '${Platform.environment['USERPROFILE'] ?? 'C:/Users/user'}\\Documents\\OpenVault';
@@ -51,13 +48,10 @@ class SshKeyService {
     if (Platform.isAndroid) {
       try {
         final ext = await getExternalStorageDirectory();
-        if (ext != null) {
-          final path = ext.path;
-          final idx = path.indexOf('/Android/data/');
-          if (idx > 0) return path.substring(0, idx);
-        }
+        if (ext != null) return ext.path;
       } catch (_) {}
-      return '/storage/emulated/0';
+      final dir = await getApplicationSupportDirectory();
+      return dir.path;
     }
     if (Platform.isWindows) {
       return Platform.environment['USERPROFILE'] ?? 'C:/Users/user';
