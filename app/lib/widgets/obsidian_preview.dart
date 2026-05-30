@@ -13,10 +13,19 @@ import '../theme/app_colors.dart';
 //  - Syntax highlighting in code blocks
 //  - Standard MD: tables, bold, italic, HR, lists, blockquotes
 class ObsidianPreview extends StatelessWidget {
-  const ObsidianPreview({super.key, required this.content, this.onWikilink});
+  const ObsidianPreview({
+    super.key,
+    required this.content,
+    this.onWikilink,
+    this.onToggleCheckbox,
+  });
 
   final String content;
   final void Function(String target)? onWikilink;
+  /// Called when a checkbox in the preview is toggled.
+  /// [index] is the 0-based occurrence of `[ ]`/`[x]` in the source,
+  /// [checked] is the new value.
+  final void Function(int index, bool checked)? onToggleCheckbox;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +37,7 @@ class ObsidianPreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (frontmatter != null) _FrontmatterCard(data: frontmatter),
-        _MarkdownBody(source: preprocessed, onWikilink: onWikilink),
+        _MarkdownBody(source: preprocessed, onWikilink: onWikilink, onToggleCheckbox: onToggleCheckbox),
       ],
     );
   }
@@ -103,6 +112,12 @@ class ObsidianPreview extends StatelessWidget {
         }
       }
 
+      // Checked checkbox → strikethrough on the text (- [x] text → - [x] ~~text~~)
+      line = line.replaceAllMapped(
+        RegExp(r'^(\s*-\s+\[[xX]\]\s+)(.+)$'),
+        (m) => '${m.group(1)}~~${m.group(2)}~~',
+      );
+
       // [[Wikilinks]]
       line = line.replaceAllMapped(
         RegExp(r'\[\[([^\]|]+)(?:\|([^\]]+))?\]\]'),
@@ -127,9 +142,10 @@ class ObsidianPreview extends StatelessWidget {
 // ── Markdown Body ─────────────────────────────────────────────────────────────
 
 class _MarkdownBody extends StatelessWidget {
-  const _MarkdownBody({required this.source, this.onWikilink});
+  const _MarkdownBody({required this.source, this.onWikilink, this.onToggleCheckbox});
   final String source;
   final void Function(String)? onWikilink;
+  final void Function(int, bool)? onToggleCheckbox;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +172,7 @@ class _MarkdownBody extends StatelessWidget {
         final plain = <String>[];
         void flushPlain() {
           if (plain.isEmpty) return;
-          widgets.add(_PureMarkdown(source: plain.join('\n')));
+          widgets.add(_PureMarkdown(source: plain.join('\n'), onToggleCheckbox: onToggleCheckbox));
           plain.clear();
         }
         for (final line in chunkLines) {
@@ -170,8 +186,7 @@ class _MarkdownBody extends StatelessWidget {
         flushPlain();
       } else {
         // No tokens — pass the whole block to flutter_markdown at once
-        // This preserves multi-line structures like code blocks and blockquotes
-        widgets.add(_PureMarkdown(source: chunk));
+        widgets.add(_PureMarkdown(source: chunk, onToggleCheckbox: onToggleCheckbox));
       }
     }
 
@@ -203,18 +218,53 @@ class _MarkdownBody extends StatelessWidget {
 
 // ── Pure Markdown (via flutter_markdown) ─────────────────────────────────────
 
-class _PureMarkdown extends StatelessWidget {
-  const _PureMarkdown({required this.source});
+class _PureMarkdown extends StatefulWidget {
+  const _PureMarkdown({required this.source, this.onToggleCheckbox});
   final String source;
+  final void Function(int, bool)? onToggleCheckbox;
+
+  @override
+  State<_PureMarkdown> createState() => _PureMarkdownState();
+}
+
+class _PureMarkdownState extends State<_PureMarkdown> {
+  // Counts checkboxes seen during a single build — reset each build.
+  int _cbCount = 0;
 
   @override
   Widget build(BuildContext context) {
+    _cbCount = 0; // reset before each build
     return MarkdownBody(
-      data: source,
+      data: widget.source,
       styleSheet: _sheet(),
       builders: {'code': _SyntaxCodeBuilder()},
+      checkboxBuilder: _buildCheckbox,
       softLineBreak: true,
       fitContent: false,
+    );
+  }
+
+  Widget _buildCheckbox(bool checked) {
+    final idx = _cbCount++;
+    final cb = widget.onToggleCheckbox;
+    return GestureDetector(
+      onTap: cb != null ? () => cb(idx, !checked) : null,
+      child: Container(
+        width: 18,
+        height: 18,
+        margin: const EdgeInsets.only(right: 6, top: 2),
+        decoration: BoxDecoration(
+          color: checked ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: checked ? AppColors.primary : AppColors.outline,
+            width: 1.5,
+          ),
+        ),
+        child: checked
+            ? const Icon(Icons.check, size: 13, color: AppColors.onPrimary)
+            : null,
+      ),
     );
   }
 

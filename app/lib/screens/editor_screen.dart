@@ -73,6 +73,19 @@ class _EditorScreenState extends State<EditorScreen> {
     }
   }
 
+  void _toggleCheckbox(int idx, bool checked) {
+    final text = _ctrl.text;
+    final matches = RegExp(r'\[[ xX]\]', caseSensitive: false).allMatches(text).toList();
+    if (idx >= matches.length) return;
+    final m = matches[idx];
+    _ctrl.value = TextEditingValue(
+      text: text.replaceRange(m.start, m.end, checked ? '[x]' : '[ ]'),
+      selection: _ctrl.selection,
+    );
+    setState(() => _dirty = true);
+    _save();
+  }
+
   @override
   Widget build(BuildContext context) {
     final fileName = widget.filePath.split('/').last;
@@ -116,16 +129,17 @@ class _EditorScreenState extends State<EditorScreen> {
                     ctrl: _ctrl,
                     vaultId: widget.vaultId,
                     onChanged: () => setState(() => _dirty = true),
+                    onToggleCheckbox: _toggleCheckbox,
                   );
                 }
                 return switch (_mode) {
                   EditorMode.split => Row(children: [
                       Expanded(child: _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true))),
                       Container(width: 1, color: AppColors.outlineVariant),
-                      Expanded(child: _PreviewPane(content: _ctrl.text)),
+                      Expanded(child: _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox)),
                     ]),
                   EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true)),
-                  EditorMode.preview => _PreviewPane(content: _ctrl.text),
+                  EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox),
                 };
               },
             ),
@@ -227,8 +241,9 @@ class _EditorPaneState extends State<_EditorPane> {
 // ── Preview pane ──────────────────────────────────────────────────────────────
 
 class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.content});
+  const _PreviewPane({required this.content, this.onToggleCheckbox});
   final String content;
+  final void Function(int, bool)? onToggleCheckbox;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +254,10 @@ class _PreviewPane extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
-            child: ObsidianPreview(content: content),
+            child: ObsidianPreview(
+              content: content,
+              onToggleCheckbox: onToggleCheckbox,
+            ),
           ),
         ),
       ),
@@ -250,10 +268,11 @@ class _PreviewPane extends StatelessWidget {
 // ── Mobile: Tab-Toggle ────────────────────────────────────────────────────────
 
 class _MobileEditorView extends StatefulWidget {
-  const _MobileEditorView({required this.ctrl, required this.onChanged, required this.vaultId});
+  const _MobileEditorView({required this.ctrl, required this.onChanged, required this.vaultId, this.onToggleCheckbox});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
   final String vaultId;
+  final void Function(int, bool)? onToggleCheckbox;
 
   @override
   State<_MobileEditorView> createState() => _MobileEditorViewState();
@@ -277,7 +296,7 @@ class _MobileEditorViewState extends State<_MobileEditorView> {
         ),
         Expanded(
           child: _showPreview
-              ? _PreviewPane(content: widget.ctrl.text)
+              ? _PreviewPane(content: widget.ctrl.text, onToggleCheckbox: widget.onToggleCheckbox)
               : _EditorPane(ctrl: widget.ctrl, vaultId: widget.vaultId, onChanged: widget.onChanged),
         ),
       ],

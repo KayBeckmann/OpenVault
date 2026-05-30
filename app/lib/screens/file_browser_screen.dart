@@ -339,6 +339,17 @@ class _EditorWrapperState extends State<_EditorWrapper> {
     }
   }
 
+  void _toggleCheckboxInCtrl(int idx, bool checked) {
+    final text = _ctrl.text;
+    final matches = RegExp(r'\[[ xX]\]', caseSensitive: false).allMatches(text).toList();
+    if (idx >= matches.length) return;
+    final m = matches[idx];
+    final newText = text.replaceRange(m.start, m.end, checked ? '[x]' : '[ ]');
+    _ctrl.value = TextEditingValue(text: newText, selection: _ctrl.selection);
+    setState(() => _dirty = true);
+    // Auto-save after toggling a checkbox
+    _save();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -403,11 +414,17 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                     onChanged: () => setState(() => _dirty = true),
                   );
                   if (!isWide || _mode == EditorMode.edit) return editPane;
-                  if (_mode == EditorMode.preview) return _ReadPane(content: _ctrl.text);
+                  if (_mode == EditorMode.preview) return _ReadPane(
+                    content: _ctrl.text,
+                    onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
+                  );
                   return Row(children: [
                     Expanded(child: editPane),
                     Container(width: 1, color: AppColors.outlineVariant),
-                    Expanded(child: _ReadPane(content: _ctrl.text)),
+                    Expanded(child: _ReadPane(
+                      content: _ctrl.text,
+                      onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
+                    )),
                   ]);
                 }),
         ),
@@ -607,8 +624,9 @@ class _EditPaneState extends State<_EditPane> {
 }
 
 class _ReadPane extends StatelessWidget {
-  const _ReadPane({required this.content});
+  const _ReadPane({required this.content, this.onToggleCheckbox});
   final String content;
+  final void Function(int, bool)? onToggleCheckbox;
 
   @override
   Widget build(BuildContext context) {
@@ -619,7 +637,10 @@ class _ReadPane extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
-            child: ObsidianPreview(content: content),
+            child: ObsidianPreview(
+              content: content,
+              onToggleCheckbox: onToggleCheckbox,
+            ),
           ),
         ),
       ),
