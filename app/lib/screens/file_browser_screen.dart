@@ -137,8 +137,14 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
     if (_autoPushOnClose) {
       setState(() { _working = true; });
       try {
+        final now = DateTime.now();
+        final ts = '${now.year}-'
+            '${now.month.toString().padLeft(2, '0')}-'
+            '${now.day.toString().padLeft(2, '0')} '
+            '${now.hour.toString().padLeft(2, '0')}:'
+            '${now.minute.toString().padLeft(2, '0')}';
         await ApiClient().post('/api/vaults/${widget.vaultId}/push', {
-          'commitMessage': 'Auto-commit beim Schließen (OpenVault)',
+          'commitMessage': 'Auto-commit $ts (OpenVault)',
         });
       } catch (_) {
         // Fehler beim Push ignorieren — Vault trotzdem schließen

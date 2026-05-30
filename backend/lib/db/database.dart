@@ -67,9 +67,12 @@ void _migrate(Database d) {
   // Migration: add ssh_key_id column if missing (for existing databases)
   try {
     d.execute('ALTER TABLE vaults ADD COLUMN ssh_key_id TEXT REFERENCES ssh_keys(id) ON DELETE SET NULL');
-  } catch (_) {
-    // Column already exists — ignore
-  }
+  } catch (_) {}
+
+  // Migration: add auto_push_on_close to vault_settings if missing
+  try {
+    d.execute('ALTER TABLE vault_settings ADD COLUMN auto_push_on_close INTEGER NOT NULL DEFAULT 0');
+  } catch (_) {}
 
   d.execute('''
     CREATE TABLE IF NOT EXISTS vault_settings (
