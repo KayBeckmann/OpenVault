@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'git_channel.dart';
 
 class LocalVaultService {
   static Future<File> get _file async {
@@ -176,11 +177,8 @@ class LocalVaultService {
     String repoPath, {
     String? sshKeyPath,
   }) async {
-    if (Platform.isAndroid && !await _gitAvailable()) {
-      return (
-        success: false,
-        output: 'git nicht verfügbar. Installiere Termux + git für Android-Sync.',
-      );
+    if (Platform.isAndroid) {
+      return GitChannel.pull(repoPath, sshKeyPath: sshKeyPath);
     }
     final r = await Process.run(
       'git', ['-C', repoPath, 'pull'],
@@ -194,11 +192,8 @@ class LocalVaultService {
     String message, {
     String? sshKeyPath,
   }) async {
-    if (Platform.isAndroid && !await _gitAvailable()) {
-      return (
-        success: false,
-        output: 'git nicht verfügbar. Installiere Termux + git für Android-Sync.',
-      );
+    if (Platform.isAndroid) {
+      return GitChannel.commitAndPush(repoPath, message, sshKeyPath: sshKeyPath);
     }
     final env = _gitEnv(sshKeyPath: sshKeyPath);
     // Stage all changes
@@ -220,19 +215,8 @@ class LocalVaultService {
     String destPath, {
     String? sshKeyPath,
   }) async {
-    // git is not a system binary on Android
     if (Platform.isAndroid) {
-      try {
-        final check = await Process.run('git', ['--version']);
-        if (check.exitCode != 0) throw Exception();
-      } catch (_) {
-        return (
-          success: false,
-          output: 'git ist auf diesem Gerät nicht verfügbar.\n'
-              'Android-Unterstützung via libgit2dart ist in Phase 4 geplant.\n'
-              'Tipp: Klone das Repository auf einem Desktop und öffne es hier.',
-        );
-      }
+      return GitChannel.clone(url, destPath, sshKeyPath: sshKeyPath);
     }
     final env = {
       ...Platform.environment,
