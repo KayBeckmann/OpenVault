@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../widgets/editor_toolbar.dart';
 import '../widgets/obsidian_preview.dart';
 import 'editor_screen.dart';
 import 'tags_screen.dart';
@@ -418,14 +419,15 @@ class _EditorWrapperState extends State<_EditorWrapper> {
               ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
               : LayoutBuilder(builder: (ctx, c) {
                   final isWide = c.maxWidth >= 600;
-                  if (!isWide || _mode == EditorMode.edit) {
-                    return _EditPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true));
-                  }
-                  if (_mode == EditorMode.preview) {
-                    return _ReadPane(content: _ctrl.text);
-                  }
+                  final editPane = _EditPaneWithToolbar(
+                    ctrl: _ctrl,
+                    vaultId: widget.vaultId,
+                    onChanged: () => setState(() => _dirty = true),
+                  );
+                  if (!isWide || _mode == EditorMode.edit) return editPane;
+                  if (_mode == EditorMode.preview) return _ReadPane(content: _ctrl.text);
                   return Row(children: [
-                    Expanded(child: _EditPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
+                    Expanded(child: editPane),
                     Container(width: 1, color: AppColors.outlineVariant),
                     Expanded(child: _ReadPane(content: _ctrl.text)),
                   ]);
@@ -513,6 +515,24 @@ class _ModeBtn extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EditPaneWithToolbar extends StatelessWidget {
+  const _EditPaneWithToolbar({required this.ctrl, required this.vaultId, required this.onChanged});
+  final TextEditingController ctrl;
+  final String vaultId;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        EditorToolbar(ctrl: ctrl, vaultId: vaultId, onChanged: onChanged),
+        Container(height: 1, color: AppColors.outlineVariant),
+        Expanded(child: _EditPane(ctrl: ctrl, onChanged: onChanged)),
+      ],
     );
   }
 }

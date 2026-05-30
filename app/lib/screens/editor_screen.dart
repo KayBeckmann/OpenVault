@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../widgets/editor_toolbar.dart';
 import '../widgets/obsidian_preview.dart';
 
 enum EditorMode { split, edit, preview }
@@ -113,16 +114,17 @@ class _EditorScreenState extends State<EditorScreen> {
                 if (!isWide) {
                   return _MobileEditorView(
                     ctrl: _ctrl,
+                    vaultId: widget.vaultId,
                     onChanged: () => setState(() => _dirty = true),
                   );
                 }
                 return switch (_mode) {
                   EditorMode.split => Row(children: [
-                      Expanded(child: _EditorPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true))),
+                      Expanded(child: _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true))),
                       Container(width: 1, color: AppColors.outlineVariant),
                       Expanded(child: _PreviewPane(content: _ctrl.text)),
                     ]),
-                  EditorMode.edit => _EditorPane(ctrl: _ctrl, onChanged: () => setState(() => _dirty = true)),
+                  EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true)),
                   EditorMode.preview => _PreviewPane(content: _ctrl.text),
                 };
               },
@@ -135,16 +137,22 @@ class _EditorScreenState extends State<EditorScreen> {
 // ── Editor pane ───────────────────────────────────────────────────────────────
 
 class _EditorPane extends StatelessWidget {
-  const _EditorPane({required this.ctrl, required this.onChanged});
+  const _EditorPane({required this.ctrl, required this.onChanged, required this.vaultId});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
+  final String vaultId;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.background,
-      padding: const EdgeInsets.all(24),
-      child: TextField(
+    return Column(
+      children: [
+        EditorToolbar(ctrl: ctrl, vaultId: vaultId, onChanged: onChanged),
+        Container(height: 1, color: AppColors.outlineVariant),
+        Expanded(
+          child: Container(
+            color: AppColors.background,
+            padding: const EdgeInsets.all(24),
+            child: TextField(
         controller: ctrl,
         onChanged: (_) => onChanged(),
         maxLines: null,
@@ -158,9 +166,12 @@ class _EditorPane extends StatelessWidget {
           hintText: 'Hier schreiben…',
           hintStyle: GoogleFonts.jetBrainsMono(color: AppColors.outline),
         ),
-        cursorColor: AppColors.primary,
-        keyboardType: TextInputType.multiline,
-      ),
+              cursorColor: AppColors.primary,
+              keyboardType: TextInputType.multiline,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -191,9 +202,10 @@ class _PreviewPane extends StatelessWidget {
 // ── Mobile: Tab-Toggle ────────────────────────────────────────────────────────
 
 class _MobileEditorView extends StatefulWidget {
-  const _MobileEditorView({required this.ctrl, required this.onChanged});
+  const _MobileEditorView({required this.ctrl, required this.onChanged, required this.vaultId});
   final TextEditingController ctrl;
   final VoidCallback onChanged;
+  final String vaultId;
 
   @override
   State<_MobileEditorView> createState() => _MobileEditorViewState();
@@ -218,7 +230,7 @@ class _MobileEditorViewState extends State<_MobileEditorView> {
         Expanded(
           child: _showPreview
               ? _PreviewPane(content: widget.ctrl.text)
-              : _EditorPane(ctrl: widget.ctrl, onChanged: widget.onChanged),
+              : _EditorPane(ctrl: widget.ctrl, vaultId: widget.vaultId, onChanged: widget.onChanged),
         ),
       ],
     );
