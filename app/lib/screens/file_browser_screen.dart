@@ -29,6 +29,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   int _treeGeneration = 0;
   bool _treeDefaultExpanded = true;
   String _defaultNoteFolder = '';
+  String _templateFolder = '_templates';
   bool _autoPushOnClose = false;
 
   @override
@@ -53,6 +54,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       final s = await ApiClient().get('/api/settings/${widget.vaultId}');
       if (mounted) setState(() {
         _defaultNoteFolder = s['defaultNoteFolder'] as String? ?? '';
+        _templateFolder = s['templateFolder'] as String? ?? '_templates';
         _autoPushOnClose = s['autoPushOnClose'] as bool? ?? false;
       });
     } catch (_) {}
@@ -92,46 +94,22 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   }
 
   Future<void> _createFile(String parentPath) async {
-    final ctrl = TextEditingController(text: 'neue-notiz.md');
-    // If no specific parent given, use the default note folder from settings
     final effectiveParent = parentPath.isEmpty ? _defaultNoteFolder : parentPath;
-    final created = await showDialog<String>(
+    final result = await showDialog<({String path, String content})>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        title: Text('Neue Datei', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Dateiname'), autofocus: true),
-            if (effectiveParent.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Ordner: $effectiveParent/',
-                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
-          ElevatedButton(
-            onPressed: () {
-              final name = ctrl.text.trim();
-              if (name.isEmpty) return;
-              final path = effectiveParent.isEmpty ? name : '$effectiveParent/$name';
-              Navigator.pop(ctx, path);
-            },
-            child: const Text('Erstellen'),
-          ),
-        ],
+      builder: (ctx) => _NewFileDialog(
+        vaultId: widget.vaultId,
+        effectiveParent: effectiveParent,
+        templateFolder: _templateFolder,
       ),
     );
-    if (created == null) return;
-    await ApiClient().put('/api/files/${widget.vaultId}/file', {'path': created, 'content': ''});
+    if (result == null) return;
+    await ApiClient().put('/api/files/${widget.vaultId}/file', {
+      'path': result.path,
+      'content': result.content,
+    });
     await _loadTree();
-    _openFile(created);
+    _openFile(result.path);
   }
 
   Future<void> _closeVault() async {
@@ -912,6 +890,303 @@ class _NodeState extends State<_Node> {
             onCreate: widget.onCreate,
           ))),
       ],
+    );
+  }
+}
+
+// ── New File Dialog with template selection ───────────────────────────────────
+
+class _NewFileDialog extends StatefulWidget {
+  const _NewFileDialog({
+    required this.vaultId,
+    required this.effectiveParent,
+    required this.templateFolder,
+  });
+
+  final String vaultId;
+  final String effectiveParent;
+  final String templateFolder;
+
+  @override
+  State<_NewFileDialog> createState() => _NewFileDialogState();
+}
+
+class _NewFileDialogState extends State<_NewFileDialog> {
+  final _nameCtrl = TextEditingController(text: 'neue-notiz.md');
+  List<_Template> _templates = [];
+  _Template? _selected; // null = leere Notiz
+  bool _loadingTemplates = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplates();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTemplates() async {
+    try {
+      // Search for .md files inside the template folder
+      final result = await ApiClient().get(
+        '/api/files/${widget.vaultId}/tree',
+      );
+      final children = result['children'] as List? ?? [];
+      final templates = <_Template>[];
+      _collectTemplates(children, widget.templateFolder, templates);
+      setState(() {
+        _templates = templates;
+        _loadingTemplates = false;
+      });
+    } catch (_) {
+      setState(() => _loadingTemplates = false);
+    }
+  }
+
+  void _collectTemplates(List nodes, String folderPath, List<_Template> out) {
+    for (final n in nodes) {
+      final path = n['path'] as String? ?? '';
+      final type = n['type'] as String? ?? '';
+      if (type == 'folder') {
+        if (path == folderPath || path.startsWith('$folderPath/')) {
+          _collectTemplates(n['children'] as List? ?? [], folderPath, out);
+        } else {
+          _collectTemplates(n['children'] as List? ?? [], folderPath, out);
+        }
+      } else if (type == 'file' &&
+          (path.startsWith('$folderPath/') || path.startsWith('${folderPath}\\')) &&
+          path.endsWith('.md')) {
+        final name = path.split('/').last.replaceAll('.md', '');
+        out.add(_Template(name: name, path: path));
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    final filePath = widget.effectiveParent.isEmpty
+        ? name
+        : '${widget.effectiveParent}/$name';
+
+    String content = '';
+    if (_selected != null) {
+      try {
+        content = await ApiClient().getRaw(
+          '/api/files/${widget.vaultId}/file?path=${Uri.encodeQueryComponent(_selected!.path)}',
+        );
+      } catch (_) {
+        content = '';
+      }
+    }
+
+    if (mounted) {
+      Navigator.pop(context, (path: filePath, content: content));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Neue Notiz',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.onSurface,
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.outlineVariant),
+
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Filename
+                  TextField(
+                    controller: _nameCtrl,
+                    autofocus: true,
+                    onSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      labelText: 'Dateiname',
+                      helperText: widget.effectiveParent.isEmpty
+                          ? 'Wird im Vault-Wurzelverzeichnis gespeichert'
+                          : 'Ordner: ${widget.effectiveParent}/',
+                      helperStyle: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Template label
+                  Text(
+                    'Vorlage',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Template list
+                  if (_loadingTemplates)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                        ),
+                      ),
+                    )
+                  else
+                    _TemplateGrid(
+                      templates: _templates,
+                      selected: _selected,
+                      onSelect: (t) => setState(() => _selected = t),
+                    ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1, color: AppColors.outlineVariant),
+
+            // Actions
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Abbrechen'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _submit,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: Text(_selected == null ? 'Leere Notiz' : 'Mit Vorlage erstellen'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Template {
+  const _Template({required this.name, required this.path});
+  final String name;
+  final String path;
+}
+
+class _TemplateGrid extends StatelessWidget {
+  const _TemplateGrid({required this.templates, required this.selected, required this.onSelect});
+  final List<_Template> templates;
+  final _Template? selected;
+  final void Function(_Template?) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    // Always show "Leere Notiz" as first option
+    final items = <Widget>[
+      _TemplateChip(
+        label: 'Leere Notiz',
+        icon: Icons.note_add_outlined,
+        isSelected: selected == null,
+        onTap: () => onSelect(null),
+      ),
+      ...templates.map((t) => _TemplateChip(
+        label: t.name,
+        icon: Icons.description_outlined,
+        isSelected: selected?.path == t.path,
+        onTap: () => onSelect(t),
+      )),
+    ];
+
+    if (templates.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, size: 14, color: AppColors.outline),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Keine Vorlagen im Ordner "_templates" gefunden. '
+                'Erstelle dort .md-Dateien, um sie hier zu sehen.',
+                style: GoogleFonts.inter(fontSize: 12, color: AppColors.outline, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Wrap(spacing: 8, runSpacing: 8, children: items);
+  }
+}
+
+class _TemplateChip extends StatelessWidget {
+  const _TemplateChip({required this.label, required this.icon, required this.isSelected, required this.onTap});
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withAlpha(30) : AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.outlineVariant,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? AppColors.primary : AppColors.outline),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: isSelected ? AppColors.primary : AppColors.onSurface,
+                fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
