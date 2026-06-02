@@ -2,22 +2,20 @@ package de.kaybeckmann.app
 
 import android.os.Handler
 import android.os.Looper
+import com.jcraft.jsch.JSch
+import com.jcraft.jsch.Session
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.TransportConfigCallback
 import org.eclipse.jgit.api.errors.GitAPIException
-import org.eclipse.jgit.transport.CredentialsProvider
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.SshTransport
-import org.eclipse.jgit.transport.sshd.ServerKeyDatabase
-import org.eclipse.jgit.transport.sshd.SshdSessionFactoryBuilder
+import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
+import org.eclipse.jgit.transport.ssh.jsch.OpenSshConfig
+import org.eclipse.jgit.util.FS
 import java.io.File
-import java.net.InetSocketAddress
-import java.security.PublicKey
-import java.security.Security
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
@@ -27,10 +25,6 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        // Replace Android's stripped-down BC with the full BouncyCastle so that
-        // Apache MINA SSHD can load Ed25519 OpenSSH keys on Android < API 33.
-        Security.removeProvider("BC")
-        Security.insertProviderAt(BouncyCastleProvider(), 1)
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -75,39 +69,28 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // JSch-based SSH transport. The mwiede JSch fork (com.github.mwiede:jsch) has its own
+    // Ed25519 implementation and does NOT rely on JCE provider discovery, which is unreliable
+    // on Android < API 33. addIdentity() reads OpenSSH-format keys directly.
     private fun buildTransportCallback(sshKeyPath: String?): TransportConfigCallback? {
         if (sshKeyPath == null) return null
         val keyFile = File(sshKeyPath)
         if (!keyFile.exists()) return null
 
-        val sshDir = File(filesDir, ".ssh").also { it.mkdirs() }
-
-        val factory = SshdSessionFactoryBuilder()
-            .setServerKeyDatabase { _, _ ->
-                object : ServerKeyDatabase {
-                    override fun lookup(
-                        connectAddress: String,
-                        remoteAddress: InetSocketAddress,
-                        config: ServerKeyDatabase.Configuration,
-                    ): List<PublicKey> = emptyList()
-
-                    override fun accept(
-                        connectAddress: String,
-                        remoteAddress: InetSocketAddress,
-                        serverKey: PublicKey,
-                        config: ServerKeyDatabase.Configuration,
-                        provider: CredentialsProvider,
-                    ): Boolean = true
-                }
-            }
-            .setDefaultIdentities { _ -> listOf(keyFile.toPath()) }
-            .setHomeDirectory(filesDir)
-            .setSshDirectory(sshDir)
-            .build(null)
-
         return TransportConfigCallback { transport ->
             if (transport is SshTransport) {
-                transport.sshSessionFactory = factory
+                transport.sshSessionFactory = object : JschConfigSessionFactory() {
+                    override fun configure(hc: OpenSshConfig.Host, session: Session) {
+                        session.setConfig("StrictHostKeyChecking", "no")
+                    }
+
+                    @Throws(com.jcraft.jsch.JSchException::class)
+                    override fun createDefaultJSch(fs: FS): JSch {
+                        val jsch = JSch()
+                        jsch.addIdentity(keyFile.absolutePath)
+                        return jsch
+                    }
+                }
             }
         }
     }

@@ -11,14 +11,12 @@
 -dontwarn com.google.android.play.core.splitinstall.**
 -dontwarn com.google.android.play.core.tasks.**
 
-# JGit / Apache SSHD — keep all classes (uses ServiceLoader for dynamic discovery)
-# Without this, R8 strips SSH key loaders and authentication providers,
-# causing NoClassDefFoundError at runtime which hangs the MethodChannel.
+# JGit + JSch — keep all classes (ServiceLoader + reflection used internally)
 -keep class org.eclipse.jgit.** { *; }
--keep class org.apache.sshd.** { *; }
+-keep class com.jcraft.jsch.** { *; }
 -keep class org.slf4j.** { *; }
 
-# JGit / Apache SSHD — suppress missing classes not available on Android
+# Suppress missing platform classes not available on Android
 -dontwarn java.lang.ProcessHandle
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn javax.management.**
@@ -28,10 +26,14 @@
 -dontwarn java.rmi.**
 -dontwarn javax.security.auth.callback.**
 -dontwarn javax.security.auth.login.**
--dontwarn org.apache.tomcat.jni.**
 
-# BouncyCastle — keep all classes + suppress warnings for APIs not on Android
-# Apache MINA SSHD uses BC for Ed25519 OpenSSH key loading on Android < API 33.
-# Without explicit keep rules R8 strips BC classes loaded via ServiceLoader/reflection.
--keep class org.bouncycastle.** { *; }
+# JSch optional deps not needed on Android
+# Unix domain socket support (junixsocket library, not present on Android)
+-dontwarn org.newsclub.net.unix.**
+# com.sun.jna: Windows Pageant SSH agent connector (not available on Android)
+-dontwarn com.sun.jna.**
+# Log4J2: JSch supports multiple loggers; we use slf4j-nop via the slf4j bridge
+-dontwarn org.apache.logging.log4j.**
+# BouncyCastle: JSch uses BC for optional algorithms (CAST128, SNTRUP761, etc.)
+# Core Ed25519 and AES-GCM use JSch's own implementation — BC not required.
 -dontwarn org.bouncycastle.**
