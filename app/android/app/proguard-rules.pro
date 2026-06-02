@@ -24,14 +24,14 @@
 -dontwarn javax.management.**
 -dontwarn javax.security.auth.login.CredentialException
 -dontwarn javax.security.auth.login.FailedLoginException
--dontwarn org.bouncycastle.asn1.pkcs.PrivateKeyInfo
--dontwarn org.bouncycastle.crypto.prng.RandomGenerator
--dontwarn org.bouncycastle.crypto.prng.VMPCRandomGenerator
--dontwarn org.bouncycastle.operator.InputDecryptorProvider
--dontwarn org.bouncycastle.pkcs.**
--dontwarn org.bouncycastle.openssl.**
 -dontwarn org.ietf.jgss.**
 -dontwarn java.rmi.**
 -dontwarn javax.security.auth.callback.**
 -dontwarn javax.security.auth.login.**
 -dontwarn org.apache.tomcat.jni.**
+
+# BouncyCastle — keep all classes + suppress warnings for APIs not on Android
+# Apache MINA SSHD uses BC for Ed25519 OpenSSH key loading on Android < API 33.
+# Without explicit keep rules R8 strips BC classes loaded via ServiceLoader/reflection.
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**

@@ -5,6 +5,7 @@ import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.TransportConfigCallback
 import org.eclipse.jgit.api.errors.GitAPIException
@@ -16,6 +17,7 @@ import org.eclipse.jgit.transport.sshd.SshdSessionFactoryBuilder
 import java.io.File
 import java.net.InetSocketAddress
 import java.security.PublicKey
+import java.security.Security
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
@@ -25,6 +27,10 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        // Replace Android's stripped-down BC with the full BouncyCastle so that
+        // Apache MINA SSHD can load Ed25519 OpenSSH keys on Android < API 33.
+        Security.removeProvider("BC")
+        Security.insertProviderAt(BouncyCastleProvider(), 1)
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->

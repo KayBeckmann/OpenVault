@@ -61,6 +61,9 @@ dependencies {
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.7.0.202309050840-r")
     implementation("org.eclipse.jgit:org.eclipse.jgit.ssh.apache:6.7.0.202309050840-r")
     implementation("org.slf4j:slf4j-nop:2.0.9")
+    // Full BouncyCastle needed for Ed25519 OpenSSH key loading via Apache MINA SSHD on
+    // Android < API 33 (Java 15 EdDSA JCA APIs not available before Android 13).
+    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
 }
 
 flutter {
