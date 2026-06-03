@@ -71,6 +71,9 @@ dependencies {
     }
     implementation("com.github.mwiede:jsch:0.2.17")
     implementation("org.slf4j:slf4j-nop:2.0.9")
+    // BouncyCastle needed as JCA provider for Ed25519 signing via JSch on Android < API 33.
+    // KeyFactory("Ed25519") is only available in Android's JCA from API 33; BC fills the gap.
+    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
 }
 
 flutter {

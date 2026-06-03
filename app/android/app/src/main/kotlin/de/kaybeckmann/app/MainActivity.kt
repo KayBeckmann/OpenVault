@@ -5,6 +5,7 @@ import android.os.Looper
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import io.flutter.embedding.android.FlutterActivity
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import org.eclipse.jgit.api.Git
@@ -16,6 +17,7 @@ import org.eclipse.jgit.transport.ssh.jsch.JschConfigSessionFactory
 import org.eclipse.jgit.transport.ssh.jsch.OpenSshConfig
 import org.eclipse.jgit.util.FS
 import java.io.File
+import java.security.Security
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
@@ -25,6 +27,13 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        // Register full BouncyCastle as JCA provider so JSch can resolve Ed25519
+        // KeyFactory and Signature on Android < API 33 (where they're missing from the JCA).
+        if (Security.getProvider("BC") == null ||
+            Security.getProvider("BC")?.javaClass?.name?.contains("BouncyCastle") == false) {
+            Security.removeProvider("BC")
+            Security.insertProviderAt(BouncyCastleProvider(), 1)
+        }
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->

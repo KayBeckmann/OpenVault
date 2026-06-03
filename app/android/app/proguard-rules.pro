@@ -34,6 +34,7 @@
 -dontwarn com.sun.jna.**
 # Log4J2: JSch supports multiple loggers; we use slf4j-nop via the slf4j bridge
 -dontwarn org.apache.logging.log4j.**
-# BouncyCastle: JSch uses BC for optional algorithms (CAST128, SNTRUP761, etc.)
-# Core Ed25519 and AES-GCM use JSch's own implementation — BC not required.
+# BouncyCastle: required as JCA provider for Ed25519 KeyFactory/Signature on Android < API 33.
+# JSch falls back to JCA for signing; without BC the Ed25519 KeyFactory is missing on older Android.
+-keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
