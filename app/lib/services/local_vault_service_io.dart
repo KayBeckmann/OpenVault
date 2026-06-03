@@ -89,6 +89,21 @@ class LocalVaultService {
   static void deleteFile(String base, String rel) =>
       File('$base/$rel').deleteSync();
 
+  static void renameFile(String base, String rel, String newName) {
+    final src = File('$base/$rel');
+    final parent = rel.contains('/') ? rel.substring(0, rel.lastIndexOf('/')) : '';
+    final dest = parent.isEmpty ? newName : '$parent/$newName';
+    src.renameSync('$base/$dest');
+  }
+
+  static void moveFile(String base, String rel, String destFolder) {
+    final src = File('$base/$rel');
+    final name = rel.split('/').last;
+    final dest = destFolder.isEmpty ? name : '$destFolder/$name';
+    Directory('$base/$destFolder').createSync(recursive: true);
+    src.renameSync('$base/$dest');
+  }
+
   static void createFolder(String base, String rel) =>
       Directory('$base/$rel').createSync(recursive: true);
 

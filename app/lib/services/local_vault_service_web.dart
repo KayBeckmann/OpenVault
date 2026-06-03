@@ -12,6 +12,8 @@ class LocalVaultService {
   static String readFile(String base, String rel) => '';
   static void writeFile(String base, String rel, String content) {}
   static void deleteFile(String base, String rel) {}
+  static void renameFile(String base, String rel, String newName) {}
+  static void moveFile(String base, String rel, String destFolder) {}
   static void createFolder(String base, String rel) {}
   static List<Map<String, dynamic>> searchFiles(String base, String query) => [];
   static List<String> collectFilePaths(String base) => [];

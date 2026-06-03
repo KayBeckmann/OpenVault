@@ -291,6 +291,40 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
     await _loadTree();
   }
 
+  Future<void> _renameFile(String path, String newName) async {
+    try {
+      if (widget.localPath != null) {
+        LocalVaultService.renameFile(widget.localPath!, path, newName);
+      } else {
+        await ApiClient().post('/api/files/${widget.vaultId}/rename', {'path': path, 'newName': newName});
+      }
+      if (_activeFilePath == path) {
+        final parent = path.contains('/') ? path.substring(0, path.lastIndexOf('/')) : '';
+        setState(() => _activeFilePath = parent.isEmpty ? newName : '$parent/$newName');
+      }
+      await _loadTree();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+    }
+  }
+
+  Future<void> _moveFile(String path, String destFolder) async {
+    try {
+      if (widget.localPath != null) {
+        LocalVaultService.moveFile(widget.localPath!, path, destFolder);
+      } else {
+        await ApiClient().post('/api/files/${widget.vaultId}/move', {'path': path, 'destFolder': destFolder});
+      }
+      if (_activeFilePath == path) {
+        final name = path.split('/').last;
+        setState(() => _activeFilePath = destFolder.isEmpty ? name : '$destFolder/$name');
+      }
+      await _loadTree();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler: $e')));
+    }
+  }
+
   void _openFile(String path) {
     setState(() => _activeFilePath = path);
   }
@@ -440,6 +474,8 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               onOpen: _openFile,
               onDelete: _deleteFile,
               onCreate: _createFile,
+              onRename: widget.localPath != null ? _renameFile : null,
+              onMove: widget.localPath != null ? _moveFile : null,
               onCollapseAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = false; }),
               onExpandAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = true; }),
             );
@@ -689,12 +725,14 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                     scrollController: _editorScroll,
                     onChanged: () => setState(() => _dirty = true),
                   );
-                  if (!isWide || _mode == EditorMode.edit) return editPane;
+                  if (_mode == EditorMode.edit) return editPane;
                   if (_mode == EditorMode.preview) return _ReadPane(
                     content: _ctrl.text,
                     onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
                     onWikilink: widget.onWikilink,
                   );
+                  // Split: show side-by-side on wide screens, editor-only on narrow
+                  if (!isWide) return editPane;
                   return Row(children: [
                     Expanded(child: editPane),
                     Container(width: 1, color: AppColors.outlineVariant),
@@ -968,6 +1006,7 @@ class _SidebarContent extends StatelessWidget {
     required this.activeFilePath, required this.treeGeneration, required this.treeDefaultExpanded,
     required this.onSearch, required this.onOpen, required this.onDelete, required this.onCreate,
     required this.onCollapseAll, required this.onExpandAll,
+    this.onRename, this.onMove,
   });
 
   final bool loading;
@@ -985,6 +1024,8 @@ class _SidebarContent extends StatelessWidget {
   final Future<void> Function(String) onCreate;
   final VoidCallback onCollapseAll;
   final VoidCallback onExpandAll;
+  final Future<void> Function(String, String)? onRename;
+  final Future<void> Function(String, String)? onMove;
 
   @override
   Widget build(BuildContext context) {
@@ -1037,6 +1078,7 @@ class _SidebarContent extends StatelessWidget {
                                 defaultExpanded: treeDefaultExpanded,
                                 activeFilePath: activeFilePath,
                                 onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
+                                onRename: onRename, onMove: onMove,
                               ),
           ),
         ],
@@ -1143,13 +1185,15 @@ class _EmptyVaultHint extends StatelessWidget {
 // ── File Tree ─────────────────────────────────────────────────────────────────
 
 class _FileTree extends StatelessWidget {
-  const _FileTree({super.key, required this.nodes, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
+  const _FileTree({super.key, required this.nodes, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove});
   final List<dynamic> nodes;
   final bool defaultExpanded;
   final String? activeFilePath;
   final void Function(String) onOpen;
   final Future<void> Function(String) onDelete;
   final Future<void> Function(String) onCreate;
+  final Future<void> Function(String, String)? onRename;
+  final Future<void> Function(String, String)? onMove;
 
   @override
   Widget build(BuildContext context) {
@@ -1160,13 +1204,14 @@ class _FileTree extends StatelessWidget {
         defaultExpanded: defaultExpanded,
         activeFilePath: activeFilePath,
         onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
+        onRename: onRename, onMove: onMove,
       )).toList(),
     );
   }
 }
 
 class _Node extends StatefulWidget {
-  const _Node({required this.node, required this.depth, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate});
+  const _Node({required this.node, required this.depth, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove});
   final Map<String, dynamic> node;
   final int depth;
   final bool defaultExpanded;
@@ -1174,6 +1219,8 @@ class _Node extends StatefulWidget {
   final void Function(String) onOpen;
   final Future<void> Function(String) onDelete;
   final Future<void> Function(String) onCreate;
+  final Future<void> Function(String, String)? onRename;
+  final Future<void> Function(String, String)? onMove;
 
   @override
   State<_Node> createState() => _NodeState();
@@ -1186,6 +1233,103 @@ class _NodeState extends State<_Node> {
   void initState() {
     super.initState();
     _expanded = widget.defaultExpanded;
+  }
+
+  void _showContextMenu(BuildContext context, String path, String name) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline, color: AppColors.primary),
+              title: Text('Umbenennen', style: GoogleFonts.inter(color: AppColors.onSurface)),
+              onTap: () {
+                Navigator.pop(context);
+                _renameDialog(context, path, name);
+              },
+            ),
+            if (widget.onMove != null)
+              ListTile(
+                leading: const Icon(Icons.drive_file_move_outline, color: AppColors.primary),
+                title: Text('Verschieben', style: GoogleFonts.inter(color: AppColors.onSurface)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _moveDialog(context, path);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              title: Text('Löschen', style: GoogleFonts.inter(color: Colors.redAccent)),
+              onTap: () {
+                Navigator.pop(context);
+                widget.onDelete(path);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _renameDialog(BuildContext context, String path, String currentName) async {
+    final ctrl = TextEditingController(text: currentName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        title: Text('Umbenennen', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: GoogleFonts.inter(color: AppColors.onSurface),
+          decoration: const InputDecoration(labelText: 'Neuer Name', labelStyle: TextStyle(color: AppColors.outline)),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Umbenennen')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (newName != null && newName.isNotEmpty && newName != currentName) {
+      widget.onRename?.call(path, newName);
+    }
+  }
+
+  Future<void> _moveDialog(BuildContext context, String path) async {
+    final ctrl = TextEditingController();
+    final destFolder = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        title: Text('Verschieben nach', style: GoogleFonts.spaceGrotesk(color: AppColors.onSurface)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: GoogleFonts.inter(color: AppColors.onSurface),
+          decoration: const InputDecoration(
+            labelText: 'Zielordner (leer = Root)',
+            labelStyle: TextStyle(color: AppColors.outline),
+            hintText: 'z.B. Ordner/Unterordner',
+            hintStyle: TextStyle(color: AppColors.outline),
+          ),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Verschieben')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (destFolder != null) {
+      widget.onMove?.call(path, destFolder);
+    }
   }
 
   @override
@@ -1206,6 +1350,7 @@ class _NodeState extends State<_Node> {
             onTap: isFolder
                 ? () => setState(() => _expanded = !_expanded)
                 : () => widget.onOpen(path),
+            onLongPress: isFolder ? null : () => _showContextMenu(context, path, name),
             child: Container(
               decoration: isActive
                   ? const BoxDecoration(border: Border(left: BorderSide(color: AppColors.primary, width: 2)))
@@ -1259,6 +1404,8 @@ class _NodeState extends State<_Node> {
             onOpen: widget.onOpen,
             onDelete: widget.onDelete,
             onCreate: widget.onCreate,
+            onRename: widget.onRename,
+            onMove: widget.onMove,
           ))),
       ],
     );

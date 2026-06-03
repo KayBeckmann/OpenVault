@@ -182,12 +182,21 @@ class _EditorScreenState extends State<EditorScreen> {
               builder: (ctx, constraints) {
                 final isWide = constraints.maxWidth >= 700;
                 if (!isWide) {
-                  return _MobileEditorView(
-                    ctrl: _ctrl,
-                    vaultId: widget.vaultId,
-                    onChanged: () => setState(() => _dirty = true),
-                    onToggleCheckbox: _toggleCheckbox,
-                  );
+                  final isPreview = _mode == EditorMode.preview;
+                  return Column(children: [
+                    Container(
+                      color: AppColors.surfaceContainerHigh,
+                      child: Row(children: [
+                        Expanded(child: _Tab(label: 'Bearbeiten', active: !isPreview,
+                            onTap: () => setState(() => _mode = EditorMode.edit))),
+                        Expanded(child: _Tab(label: 'Vorschau', active: isPreview,
+                            onTap: () => setState(() => _mode = EditorMode.preview))),
+                      ]),
+                    ),
+                    Expanded(child: isPreview
+                        ? _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink)
+                        : _EditorPane(ctrl: _ctrl, vaultId: widget.vaultId, onChanged: () => setState(() => _dirty = true))),
+                  ]);
                 }
                 return switch (_mode) {
                   EditorMode.split => Row(children: [

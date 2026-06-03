@@ -6,6 +6,7 @@ import 'theme/app_colors.dart';
 import 'services/auth_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/vault_screen.dart';
 import 'screens/native_vault_screen.dart';
 
 void main() {
@@ -69,6 +70,6 @@ class _WebRootRouterState extends State<_WebRootRouter> {
       );
     }
     final auth = context.watch<AuthService>();
-    return auth.isAuthenticated ? const HomeScreen() : const AuthScreen();
+    return auth.isAuthenticated ? const VaultScreen() : const AuthScreen();
   }
 }

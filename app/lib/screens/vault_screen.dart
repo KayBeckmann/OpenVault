@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import 'file_browser_screen.dart';
+import 'ssh_keys_screen.dart';
 import 'vault_settings_screen.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -132,6 +135,16 @@ class _VaultScreenState extends State<VaultScreen> {
               child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
           ),
           IconButton(icon: const Icon(Icons.add), onPressed: _working ? null : _showCloneDialog, tooltip: 'Clone vault'),
+          IconButton(
+            icon: const Icon(Icons.key_outlined),
+            tooltip: 'SSH-Keys',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SshKeysScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Abmelden',
+            onPressed: () => context.read<AuthService>().logout(),
+          ),
         ],
       ),
       body: Column(
