@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
@@ -22,8 +23,9 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _saving = false;
   bool _dirty = false;
   EditorMode _mode = EditorMode.split;
-  bool _syncScroll = false;
+  bool _syncScroll = true;
   bool _syncing = false;
+  Timer? _autosaveTimer;
 
   late TextEditingController _ctrl;
   final _editorScroll  = ScrollController();
@@ -40,12 +42,20 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
     _editorScroll.removeListener(_onEditorScroll);
     _previewScroll.removeListener(_onPreviewScroll);
     _editorScroll.dispose();
     _previewScroll.dispose();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(seconds: 2), () {
+      if (_dirty && !_saving) _save();
+    });
   }
 
   void _onEditorScroll()  => _sync(_editorScroll, _previewScroll);
@@ -195,7 +205,7 @@ class _EditorScreenState extends State<EditorScreen> {
                     ),
                     Expanded(child: isPreview
                         ? _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink)
-                        : _EditorPane(ctrl: _ctrl, vaultId: widget.vaultId, onChanged: () => setState(() => _dirty = true))),
+                        : _EditorPane(ctrl: _ctrl, vaultId: widget.vaultId, onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); })),
                   ]);
                 }
                 return switch (_mode) {
@@ -204,7 +214,7 @@ class _EditorScreenState extends State<EditorScreen> {
                         ctrl: _ctrl,
                         vaultId: widget.filePath.isEmpty ? '' : widget.vaultId,
                         scrollController: _editorScroll,
-                        onChanged: () => setState(() => _dirty = true),
+                        onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); },
                       )),
                       Container(width: 1, color: AppColors.outlineVariant),
                       Expanded(child: _PreviewPane(
@@ -214,7 +224,7 @@ class _EditorScreenState extends State<EditorScreen> {
                         onWikilink: _openWikilink,
                       )),
                     ]),
-                  EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () => setState(() => _dirty = true)),
+                  EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); }),
                   EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink),
                 };
               },

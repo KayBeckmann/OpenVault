@@ -139,6 +139,7 @@ class _NativeVaultScreenState extends State<NativeVaultScreen> {
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => FileBrowserScreen(
         localPath: vault['localPath'] as String,
+        nativeVaultId: vault['id'] as String?,
         vaultName: vault['name'] as String? ?? 'Vault',
         remoteUrl: vault['remoteUrl'] as String?,
         sshKeyPath: _sshKey?.privateKeyPath,

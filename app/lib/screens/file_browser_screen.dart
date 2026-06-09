@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import '../services/local_vault_service.dart';
 import '../widgets/editor_toolbar.dart';
+import '../widgets/folder_picker_dialog.dart';
 import '../widgets/obsidian_preview.dart';
 import 'editor_screen.dart';
+import 'native_vault_settings_screen.dart';
 import 'tags_screen.dart';
 
 class FileBrowserScreen extends StatefulWidget {
@@ -13,6 +16,7 @@ class FileBrowserScreen extends StatefulWidget {
     super.key,
     this.vaultId,
     this.localPath,
+    this.nativeVaultId,
     required this.vaultName,
     this.remoteUrl,
     this.sshKeyPath,
@@ -22,6 +26,7 @@ class FileBrowserScreen extends StatefulWidget {
 
   final String? vaultId;
   final String? localPath;
+  final String? nativeVaultId;
   final String vaultName;
   final String? remoteUrl;
   final String? sshKeyPath;
@@ -132,7 +137,19 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   }
 
   Future<void> _loadSettings() async {
-    if (widget.localPath != null) return;
+    if (widget.localPath != null) {
+      if (widget.nativeVaultId == null) return;
+      final vaults = await LocalVaultService.loadVaults();
+      final vault = vaults.firstWhere(
+        (v) => v['id'] == widget.nativeVaultId,
+        orElse: () => {},
+      );
+      if (mounted) setState(() {
+        _defaultNoteFolder = vault['defaultNoteFolder'] as String? ?? '';
+        _templateFolder = vault['templateFolder'] as String? ?? '_templates';
+      });
+      return;
+    }
     try {
       final s = await ApiClient().get('/api/settings/${widget.vaultId}');
       if (mounted) setState(() {
@@ -429,6 +446,20 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                 builder: (_) => TagsScreen(vaultId: widget.vaultId!, vaultName: widget.vaultName),
               )),
             ),
+          if (widget.nativeVaultId != null)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Einstellungen',
+              onPressed: () async {
+                await Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => NativeVaultSettingsScreen(
+                    vaultId: widget.nativeVaultId!,
+                    vaultName: widget.vaultName,
+                  ),
+                ));
+                _loadSettings();
+              },
+            ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTree, tooltip: 'Aktualisieren'),
           if (widget.localPath != null && widget.remoteUrl != null)
             IconButton(
@@ -478,6 +509,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
               onMove: widget.localPath != null ? _moveFile : null,
               onCollapseAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = false; }),
               onExpandAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = true; }),
+              localVaultPath: widget.localPath,
             );
           }
 
@@ -505,6 +537,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                         onCreate: _createFile,
                         onCollapseAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = false; }),
                         onExpandAll: () => setState(() { _treeGeneration++; _treeDefaultExpanded = true; }),
+                        localVaultPath: widget.localPath,
                       )
                     : const SizedBox.shrink(),
               ),
@@ -546,8 +579,9 @@ class _EditorWrapperState extends State<_EditorWrapper> {
   bool _saving = false;
   bool _dirty = false;
   EditorMode _mode = EditorMode.split;
-  bool _syncScroll = false;
+  bool _syncScroll = true;
   bool _syncing = false;
+  Timer? _autosaveTimer;
 
   late TextEditingController _ctrl;
   final _editorScroll  = ScrollController();
@@ -570,12 +604,20 @@ class _EditorWrapperState extends State<_EditorWrapper> {
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
     _editorScroll.removeListener(_onEditorScroll);
     _previewScroll.removeListener(_onPreviewScroll);
     _editorScroll.dispose();
     _previewScroll.dispose();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(seconds: 2), () {
+      if (_dirty && !_saving) _save();
+    });
   }
 
   void _onEditorScroll() => _sync(_editorScroll, _previewScroll);
@@ -723,7 +765,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                     vaultId: widget.vaultId,
                     localPath: widget.localPath,
                     scrollController: _editorScroll,
-                    onChanged: () => setState(() => _dirty = true),
+                    onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); },
                   );
                   if (_mode == EditorMode.edit) return editPane;
                   if (_mode == EditorMode.preview) return _ReadPane(
@@ -1006,7 +1048,7 @@ class _SidebarContent extends StatelessWidget {
     required this.activeFilePath, required this.treeGeneration, required this.treeDefaultExpanded,
     required this.onSearch, required this.onOpen, required this.onDelete, required this.onCreate,
     required this.onCollapseAll, required this.onExpandAll,
-    this.onRename, this.onMove,
+    this.onRename, this.onMove, this.localVaultPath,
   });
 
   final bool loading;
@@ -1026,6 +1068,7 @@ class _SidebarContent extends StatelessWidget {
   final VoidCallback onExpandAll;
   final Future<void> Function(String, String)? onRename;
   final Future<void> Function(String, String)? onMove;
+  final String? localVaultPath;
 
   @override
   Widget build(BuildContext context) {
@@ -1079,6 +1122,7 @@ class _SidebarContent extends StatelessWidget {
                                 activeFilePath: activeFilePath,
                                 onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
                                 onRename: onRename, onMove: onMove,
+                                localVaultPath: localVaultPath,
                               ),
           ),
         ],
@@ -1185,7 +1229,7 @@ class _EmptyVaultHint extends StatelessWidget {
 // ── File Tree ─────────────────────────────────────────────────────────────────
 
 class _FileTree extends StatelessWidget {
-  const _FileTree({super.key, required this.nodes, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove});
+  const _FileTree({super.key, required this.nodes, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove, this.localVaultPath});
   final List<dynamic> nodes;
   final bool defaultExpanded;
   final String? activeFilePath;
@@ -1194,6 +1238,7 @@ class _FileTree extends StatelessWidget {
   final Future<void> Function(String) onCreate;
   final Future<void> Function(String, String)? onRename;
   final Future<void> Function(String, String)? onMove;
+  final String? localVaultPath;
 
   @override
   Widget build(BuildContext context) {
@@ -1204,14 +1249,14 @@ class _FileTree extends StatelessWidget {
         defaultExpanded: defaultExpanded,
         activeFilePath: activeFilePath,
         onOpen: onOpen, onDelete: onDelete, onCreate: onCreate,
-        onRename: onRename, onMove: onMove,
+        onRename: onRename, onMove: onMove, localVaultPath: localVaultPath,
       )).toList(),
     );
   }
 }
 
 class _Node extends StatefulWidget {
-  const _Node({required this.node, required this.depth, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove});
+  const _Node({required this.node, required this.depth, required this.defaultExpanded, required this.activeFilePath, required this.onOpen, required this.onDelete, required this.onCreate, this.onRename, this.onMove, this.localVaultPath});
   final Map<String, dynamic> node;
   final int depth;
   final bool defaultExpanded;
@@ -1221,6 +1266,7 @@ class _Node extends StatefulWidget {
   final Future<void> Function(String) onCreate;
   final Future<void> Function(String, String)? onRename;
   final Future<void> Function(String, String)? onMove;
+  final String? localVaultPath;
 
   @override
   State<_Node> createState() => _NodeState();
@@ -1302,6 +1348,28 @@ class _NodeState extends State<_Node> {
   }
 
   Future<void> _moveDialog(BuildContext context, String path) async {
+    if (widget.localVaultPath != null) {
+      // Show visual folder picker for native vaults
+      final absPath = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => FolderPickerDialog(initialPath: widget.localVaultPath!),
+        ),
+      );
+      if (absPath == null) return;
+      // Convert absolute path back to vault-relative
+      var rel = absPath.replaceAll('\\', '/');
+      final base = widget.localVaultPath!.replaceAll('\\', '/').trimRight();
+      if (rel.startsWith(base)) {
+        rel = rel.substring(base.length);
+        while (rel.startsWith('/')) rel = rel.substring(1);
+      }
+      widget.onMove?.call(path, rel);
+      return;
+    }
+
+    // Fallback: text field for web vaults
     final ctrl = TextEditingController();
     final destFolder = await showDialog<String>(
       context: context,
@@ -1406,6 +1474,7 @@ class _NodeState extends State<_Node> {
             onCreate: widget.onCreate,
             onRename: widget.onRename,
             onMove: widget.onMove,
+            localVaultPath: widget.localVaultPath,
           ))),
       ],
     );
