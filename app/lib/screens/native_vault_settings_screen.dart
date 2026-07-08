@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/local_vault_service.dart';
+import 'addons_screen.dart';
 
 class NativeVaultSettingsScreen extends StatefulWidget {
   const NativeVaultSettingsScreen({
@@ -132,6 +133,35 @@ class _NativeVaultSettingsScreenState extends State<NativeVaultSettingsScreen> {
                         helperText: 'Leer = Vault-Wurzel. Ordner wird angelegt falls nicht vorhanden.',
                         helperStyle: GoogleFonts.inter(fontSize: 11, color: AppColors.outline),
                         prefixIcon: const Icon(Icons.create_new_folder_outlined, size: 18, color: AppColors.outline),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _SectionHeader('Erweiterungen'),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainer,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.outlineVariant),
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.extension_outlined,
+                            color: AppColors.primary),
+                        title: Text('Add-Ons',
+                            style: GoogleFonts.spaceGrotesk(
+                                color: AppColors.onSurface,
+                                fontWeight: FontWeight.w600)),
+                        subtitle: Text('Module aktivieren (z.B. Tasks)',
+                            style: GoogleFonts.inter(
+                                color: AppColors.onSurfaceVariant,
+                                fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right,
+                            color: AppColors.outline),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const AddonsScreen()),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 40),

@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'services/auth_service.dart';
+import 'addons/addon_registry.dart';
 import 'screens/auth_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/native_vault_screen.dart';
 
@@ -19,15 +19,21 @@ class OpenVaultApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb) {
-      return MaterialApp(
-        title: 'OpenVault',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
-        home: const NativeVaultScreen(),
+      return ChangeNotifierProvider(
+        create: (_) => AddonRegistry()..load(),
+        child: MaterialApp(
+          title: 'OpenVault',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.dark,
+          home: const NativeVaultScreen(),
+        ),
       );
     }
-    return ChangeNotifierProvider(
-      create: (_) => AuthService(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => AddonRegistry()..load()),
+      ],
       child: MaterialApp(
         title: 'OpenVault',
         debugShowCheckedModeBanner: false,
