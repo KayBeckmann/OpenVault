@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
+import 'addons_screen.dart';
 
 class VaultSettingsScreen extends StatefulWidget {
   const VaultSettingsScreen({super.key, required this.vaultId, required this.vaultName});
@@ -145,6 +146,28 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
                         value: _autoPushOnClose,
                         onChanged: (v) => setState(() => _autoPushOnClose = v),
                         activeThumbColor: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    _SectionHeader('Erweiterungen'),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.outlineVariant),
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.extension_outlined, color: AppColors.primary),
+                        title: Text('Add-Ons',
+                            style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface)),
+                        subtitle: Text('Module aktivieren (z.B. Tasks)',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.outline)),
+                        trailing: const Icon(Icons.chevron_right, color: AppColors.outline),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AddonsScreen()),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 40),

@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:highlight/highlight.dart' show highlight, Node;
 import 'package:markdown/markdown.dart' as md;
 import '../theme/app_colors.dart';
+import '../addons/tasks/task_query.dart';
+import '../addons/tasks/vault_task.dart';
 
 // Renders Obsidian-compatible Markdown:
 //  - YAML frontmatter display
@@ -18,6 +20,8 @@ class ObsidianPreview extends StatelessWidget {
     required this.content,
     this.onWikilink,
     this.onToggleCheckbox,
+    this.tasks,
+    this.onToggleTask,
   });
 
   final String content;
@@ -26,6 +30,13 @@ class ObsidianPreview extends StatelessWidget {
   /// [index] is the 0-based occurrence of `[ ]`/`[x]` in the source,
   /// [checked] is the new value.
   final void Function(int index, bool checked)? onToggleCheckbox;
+
+  /// Vault-wide task index used to render ```tasks query blocks.
+  /// Null = no index available yet (block shows a hint).
+  final List<VaultTask>? tasks;
+
+  /// Called when a task inside a ```tasks result is toggled (write-back).
+  final void Function(VaultTask task, bool done)? onToggleTask;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +48,13 @@ class ObsidianPreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (frontmatter != null) _FrontmatterCard(data: frontmatter),
-        _MarkdownBody(source: preprocessed, onWikilink: onWikilink, onToggleCheckbox: onToggleCheckbox),
+        _MarkdownBody(
+          source: preprocessed,
+          onWikilink: onWikilink,
+          onToggleCheckbox: onToggleCheckbox,
+          tasks: tasks,
+          onToggleTask: onToggleTask,
+        ),
       ],
     );
   }
@@ -82,6 +99,19 @@ class ObsidianPreview extends StatelessWidget {
       var line = lines[i];
 
       if (line.startsWith('```')) {
+        final lang = line.substring(3).trim().toLowerCase();
+        // ```tasks query block → collect body into a single token line.
+        if (!inCodeBlock && lang == 'tasks') {
+          final body = <String>[];
+          var j = i + 1;
+          while (j < lines.length && !lines[j].startsWith('```')) {
+            body.add(lines[j]);
+            j++;
+          }
+          out.add('TASKSQUERY:${body.join('')}');
+          i = j; // loop's i++ skips the closing fence
+          continue;
+        }
         inCodeBlock = !inCodeBlock;
         out.add(line);
         continue;
@@ -142,10 +172,18 @@ class ObsidianPreview extends StatelessWidget {
 // ── Markdown Body ─────────────────────────────────────────────────────────────
 
 class _MarkdownBody extends StatelessWidget {
-  const _MarkdownBody({required this.source, this.onWikilink, this.onToggleCheckbox});
+  const _MarkdownBody({
+    required this.source,
+    this.onWikilink,
+    this.onToggleCheckbox,
+    this.tasks,
+    this.onToggleTask,
+  });
   final String source;
   final void Function(String)? onWikilink;
   final void Function(int, bool)? onToggleCheckbox;
+  final List<VaultTask>? tasks;
+  final void Function(VaultTask, bool)? onToggleTask;
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +230,17 @@ class _MarkdownBody extends StatelessWidget {
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
+
+      if (line.startsWith('TASKSQUERY:')) {
+        flushMd();
+        final query = line.substring('TASKSQUERY:'.length).replaceAll('', '\n');
+        widgets.add(_TasksBlockView(
+          queryText: query,
+          tasks: tasks,
+          onToggleTask: onToggleTask,
+        ));
+        continue;
+      }
 
       if (line.startsWith('CALLOUT:')) {
         flushMd();
@@ -685,6 +734,159 @@ class _TagChips extends StatelessWidget {
         ),
         child: Text('#$t', style: GoogleFonts.inter(fontSize: 11, color: AppColors.primary)),
       )).toList(),
+    );
+  }
+}
+
+// ── Tasks query block (```tasks) ─────────────────────────────────────────────
+
+class _TasksBlockView extends StatelessWidget {
+  const _TasksBlockView({required this.queryText, this.tasks, this.onToggleTask});
+  final String queryText;
+  final List<VaultTask>? tasks;
+  final void Function(VaultTask, bool)? onToggleTask;
+
+  @override
+  Widget build(BuildContext context) {
+    final header = Row(
+      children: [
+        const Icon(Icons.checklist_rtl, size: 14, color: AppColors.primary),
+        const SizedBox(width: 6),
+        Text('TASKS',
+            style: GoogleFonts.jetBrainsMono(
+                fontSize: 10, letterSpacing: 1.5, color: AppColors.outline)),
+      ],
+    );
+
+    Widget wrap(Widget child) => Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.outlineVariant),
+          ),
+          child: child,
+        );
+
+    if (tasks == null) {
+      return wrap(Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          header,
+          const SizedBox(height: 8),
+          Text('Tasks-Index nicht geladen — aktiviere das Add-On „Tasks".',
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.outline)),
+        ],
+      ));
+    }
+
+    final groups = TaskQuery.parse(queryText).run(tasks!);
+    final total = groups.fold<int>(0, (a, g) => a + g.tasks.length);
+
+    return wrap(Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        const SizedBox(height: 8),
+        if (total == 0)
+          Text('Keine passenden Aufgaben.',
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.outline))
+        else
+          for (final g in groups) ...[
+            if (g.label.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 2),
+                child: Text(g.label,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
+              ),
+            for (final t in g.tasks) _TaskRow(task: t, onToggle: onToggleTask),
+          ],
+      ],
+    ));
+  }
+}
+
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({required this.task, this.onToggle});
+  final VaultTask task;
+  final void Function(VaultTask, bool)? onToggle;
+
+  static String _prioEmoji(TaskPriority p) => switch (p) {
+        TaskPriority.highest => '🔺',
+        TaskPriority.high => '⏫',
+        TaskPriority.medium => '🔼',
+        TaskPriority.low => '🔽',
+        TaskPriority.lowest => '⏬',
+        TaskPriority.none => '',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final overdue = task.isOverdue(DateTime.now());
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: onToggle != null ? () => onToggle!(task, !task.done) : null,
+            child: Container(
+              width: 16,
+              height: 16,
+              margin: const EdgeInsets.only(top: 2, right: 8),
+              decoration: BoxDecoration(
+                color: task.done ? AppColors.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(
+                    color: task.done ? AppColors.primary : AppColors.outline, width: 1.5),
+              ),
+              child: task.done
+                  ? const Icon(Icons.check, size: 11, color: AppColors.onPrimary)
+                  : null,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.description,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: task.done ? AppColors.outline : AppColors.onSurface,
+                    decoration: task.done ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (task.priority != TaskPriority.none)
+                      Text(_prioEmoji(task.priority), style: const TextStyle(fontSize: 11)),
+                    if (task.due != null)
+                      Text(
+                        '📅 ${task.due!.toIso8601String().substring(0, 10)}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          color: overdue ? AppColors.error : AppColors.outline,
+                        ),
+                      ),
+                    Text(
+                      task.filePath,
+                      style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppColors.outline),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
