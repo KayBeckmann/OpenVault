@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import '../services/local_vault_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/folder_picker_dialog.dart';
 import '../widgets/obsidian_preview.dart';
+import '../addons/addon_registry.dart';
+import '../addons/tasks/tasks_service.dart';
+import '../addons/tasks/vault_file_access.dart';
+import '../addons/tasks/vault_task.dart';
 import 'editor_screen.dart';
 import 'native_vault_settings_screen.dart';
 import 'tags_screen.dart';
@@ -50,6 +55,32 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   String _defaultNoteFolder = '';
   String _templateFolder = '_templates';
   bool _autoPushOnClose = false;
+
+  // Tasks add-on: vault-wide index for ```tasks blocks (gated on the toggle).
+  List<VaultTask>? _tasks;
+  bool _tasksEnabledLast = false;
+  bool _tasksLoading = false;
+
+  Future<void> _loadTasks() async {
+    if (_tasksLoading) return;
+    if (!_tasksEnabledLast) {
+      if (mounted) setState(() => _tasks = null);
+      return;
+    }
+    _tasksLoading = true;
+    try {
+      final VaultFileAccess access = widget.localPath != null
+          ? NativeVaultFileAccess(widget.localPath!)
+          : WebVaultFileAccess(widget.vaultId!);
+      final service = TasksService(access);
+      await service.refresh();
+      if (mounted) setState(() => _tasks = service.tasks);
+    } catch (_) {
+      // Best-effort — blocks fall back to the "activate" hint.
+    } finally {
+      _tasksLoading = false;
+    }
+  }
 
   @override
   void initState() {
@@ -426,6 +457,13 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // React to the Tasks add-on toggle: (re)build the index when it flips on.
+    final tasksEnabled = context.watch<AddonRegistry>().isEnabled('tasks');
+    if (tasksEnabled != _tasksEnabledLast) {
+      _tasksEnabledLast = tasksEnabled;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadTasks());
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -489,6 +527,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                 filePath: _activeFilePath!,
                 onBack: () => setState(() => _activeFilePath = null),
                 onWikilink: _resolveAndOpenWikilink,
+                tasks: _tasks,
               );
             }
             return _SidebarContent(
@@ -549,6 +588,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
                         localPath: widget.localPath,
                         filePath: _activeFilePath!,
                         onWikilink: _resolveAndOpenWikilink,
+                        tasks: _tasks,
                       )
                     : _EmptyEditor(onCreateFile: () => _createFile('')),
               ),
@@ -563,12 +603,13 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
 // ── Editor wrapper (inline, no separate route on desktop) ─────────────────────
 
 class _EditorWrapper extends StatefulWidget {
-  const _EditorWrapper({required this.vaultId, this.localPath, required this.filePath, this.onBack, this.onWikilink});
+  const _EditorWrapper({required this.vaultId, this.localPath, required this.filePath, this.onBack, this.onWikilink, this.tasks});
   final String? vaultId;
   final String? localPath;
   final String filePath;
   final VoidCallback? onBack;
   final void Function(String)? onWikilink;
+  final List<VaultTask>? tasks;
 
   @override
   State<_EditorWrapper> createState() => _EditorWrapperState();
@@ -772,6 +813,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                     content: _ctrl.text,
                     onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
                     onWikilink: widget.onWikilink,
+                    tasks: widget.tasks,
                   );
                   // Split: show side-by-side on wide screens, editor-only on narrow
                   if (!isWide) return editPane;
@@ -783,6 +825,7 @@ class _EditorWrapperState extends State<_EditorWrapper> {
                       scrollController: _previewScroll,
                       onToggleCheckbox: (i, v) => _toggleCheckboxInCtrl(i, v),
                       onWikilink: widget.onWikilink,
+                      tasks: widget.tasks,
                     )),
                   ]);
                 }),
@@ -987,11 +1030,12 @@ class _EditPaneState extends State<_EditPane> {
 }
 
 class _ReadPane extends StatelessWidget {
-  const _ReadPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController});
+  const _ReadPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController, this.tasks});
   final String content;
   final void Function(int, bool)? onToggleCheckbox;
   final void Function(String)? onWikilink;
   final ScrollController? scrollController;
+  final List<VaultTask>? tasks;
 
   @override
   Widget build(BuildContext context) {
@@ -1007,6 +1051,7 @@ class _ReadPane extends StatelessWidget {
               content: content,
               onToggleCheckbox: onToggleCheckbox,
               onWikilink: onWikilink,
+              tasks: tasks,
             ),
           ),
         ),

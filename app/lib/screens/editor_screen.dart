@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/obsidian_preview.dart';
+import '../addons/addon_registry.dart';
 import '../addons/tasks/tasks_service.dart';
 import '../addons/tasks/vault_file_access.dart';
 import '../addons/tasks/vault_task.dart';
@@ -48,6 +50,7 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _loadTasks() async {
+    if (!context.read<AddonRegistry>().isEnabled('tasks')) return;
     try {
       final service = TasksService(WebVaultFileAccess(widget.vaultId));
       await service.refresh();

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'addon.dart';
 import 'addon_store.dart';
 import 'builtin/hello_addon.dart';
+import 'builtin/tasks_addon.dart';
 
 /// Central registry of all built-in add-ons and their enabled-state.
 ///
@@ -13,8 +14,8 @@ class AddonRegistry extends ChangeNotifier {
       : _addons = addons ?? _defaultAddons();
 
   static List<Addon> _defaultAddons() => [
+        TasksAddon(),
         HelloAddon(),
-        // Tasks add-on registers here in A2.
       ];
 
   final List<Addon> _addons;
