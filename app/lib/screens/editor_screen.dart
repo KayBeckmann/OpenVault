@@ -5,6 +5,9 @@ import '../theme/app_colors.dart';
 import '../services/api_client.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/obsidian_preview.dart';
+import '../addons/tasks/tasks_service.dart';
+import '../addons/tasks/vault_file_access.dart';
+import '../addons/tasks/vault_task.dart';
 
 enum EditorMode { split, edit, preview }
 
@@ -31,13 +34,27 @@ class _EditorScreenState extends State<EditorScreen> {
   final _editorScroll  = ScrollController();
   final _previewScroll = ScrollController();
 
+  // Vault-wide task index for ```tasks blocks in the preview (read-only).
+  List<VaultTask>? _tasks;
+
   @override
   void initState() {
     super.initState();
     _ctrl = TextEditingController();
     _loadFile();
+    _loadTasks();
     _editorScroll.addListener(_onEditorScroll);
     _previewScroll.addListener(_onPreviewScroll);
+  }
+
+  Future<void> _loadTasks() async {
+    try {
+      final service = TasksService(WebVaultFileAccess(widget.vaultId));
+      await service.refresh();
+      if (mounted) setState(() => _tasks = service.tasks);
+    } catch (_) {
+      // Task index is best-effort; preview still renders without it.
+    }
   }
 
   @override
@@ -204,7 +221,7 @@ class _EditorScreenState extends State<EditorScreen> {
                       ]),
                     ),
                     Expanded(child: isPreview
-                        ? _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink)
+                        ? _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink, tasks: _tasks)
                         : _EditorPane(ctrl: _ctrl, vaultId: widget.vaultId, onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); })),
                   ]);
                 }
@@ -222,10 +239,11 @@ class _EditorScreenState extends State<EditorScreen> {
                         scrollController: _previewScroll,
                         onToggleCheckbox: _toggleCheckbox,
                         onWikilink: _openWikilink,
+                        tasks: _tasks,
                       )),
                     ]),
                   EditorMode.edit => _EditorPane(ctrl: _ctrl, vaultId: widget.filePath.isEmpty ? '' : widget.vaultId, onChanged: () { setState(() => _dirty = true); _scheduleAutosave(); }),
-                  EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink),
+                  EditorMode.preview => _PreviewPane(content: _ctrl.text, onToggleCheckbox: _toggleCheckbox, onWikilink: _openWikilink, tasks: _tasks),
                 };
               },
             ),
@@ -329,11 +347,12 @@ class _EditorPaneState extends State<_EditorPane> {
 // ── Preview pane ──────────────────────────────────────────────────────────────
 
 class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController});
+  const _PreviewPane({required this.content, this.onToggleCheckbox, this.onWikilink, this.scrollController, this.tasks});
   final String content;
   final void Function(int, bool)? onToggleCheckbox;
   final void Function(String)? onWikilink;
   final ScrollController? scrollController;
+  final List<VaultTask>? tasks;
 
   @override
   Widget build(BuildContext context) {
@@ -349,6 +368,7 @@ class _PreviewPane extends StatelessWidget {
               content: content,
               onToggleCheckbox: onToggleCheckbox,
               onWikilink: onWikilink,
+              tasks: tasks,
             ),
           ),
         ),
