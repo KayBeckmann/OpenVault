@@ -37,7 +37,38 @@ class TaskQuery {
   final String? _groupBy;
   final int? _limit;
 
-  static DateTime? _date(String s) => DateTime.tryParse(s.trim());
+  /// Resolves an absolute (`YYYY-MM-DD`) or relative (`today`/`tomorrow`/
+  /// `yesterday`) date token, using [now] as the anchor.
+  static DateTime? _resolveDate(String token, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    switch (token.trim().toLowerCase()) {
+      case 'today':
+        return today;
+      case 'tomorrow':
+        return today.add(const Duration(days: 1));
+      case 'yesterday':
+        return today.subtract(const Duration(days: 1));
+    }
+    return DateTime.tryParse(token.trim());
+  }
+
+  static TaskPriority? _priorityFromName(String name) {
+    switch (name.trim().toLowerCase()) {
+      case 'highest':
+        return TaskPriority.highest;
+      case 'high':
+        return TaskPriority.high;
+      case 'medium':
+        return TaskPriority.medium;
+      case 'none':
+        return TaskPriority.none;
+      case 'low':
+        return TaskPriority.low;
+      case 'lowest':
+        return TaskPriority.lowest;
+    }
+    return null;
+  }
 
   factory TaskQuery.parse(String body) {
     final filters = <bool Function(VaultTask, DateTime)>[];
@@ -58,26 +89,38 @@ class TaskQuery {
       } else if (line == 'has due date') {
         filters.add((t, _) => t.due != null);
       } else if (line.startsWith('due before ')) {
-        final d = _date(line.substring('due before '.length));
-        if (d != null) filters.add((t, _) => t.due != null && t.due!.isBefore(d));
+        final tok = line.substring('due before '.length).trim();
+        filters.add((t, now) {
+          final d = _resolveDate(tok, now);
+          return d != null && t.due != null && t.due!.isBefore(d);
+        });
       } else if (line.startsWith('due after ')) {
-        final d = _date(line.substring('due after '.length));
-        if (d != null) filters.add((t, _) => t.due != null && t.due!.isAfter(d));
+        final tok = line.substring('due after '.length).trim();
+        filters.add((t, now) {
+          final d = _resolveDate(tok, now);
+          return d != null && t.due != null && t.due!.isAfter(d);
+        });
       } else if (line.startsWith('due on ')) {
-        final d = _date(line.substring('due on '.length));
-        if (d != null) {
-          filters.add((t, _) =>
+        final tok = line.substring('due on '.length).trim();
+        filters.add((t, now) {
+          final d = _resolveDate(tok, now);
+          return d != null &&
               t.due != null &&
               t.due!.year == d.year &&
               t.due!.month == d.month &&
-              t.due!.day == d.day);
-        }
+              t.due!.day == d.day;
+        });
+      } else if (line.startsWith('priority is ')) {
+        final p = _priorityFromName(line.substring('priority is '.length));
+        if (p != null) filters.add((t, _) => t.priority == p);
       } else if (line.startsWith('path includes ')) {
-        final needle = raw.trim().substring('path includes '.length).trim().toLowerCase();
+        final needle = line.substring('path includes '.length).trim();
         filters.add((t, _) => t.filePath.toLowerCase().contains(needle));
-      } else if (line.startsWith('tag includes ')) {
-        final needle = raw.trim().substring('tag includes '.length).trim();
-        filters.add((t, _) => t.tags.any((tag) => tag.toLowerCase() == needle.toLowerCase()));
+      } else if (line.startsWith('tag includes ') || line.startsWith('tags include ')) {
+        final prefix = line.startsWith('tags include ') ? 'tags include ' : 'tag includes ';
+        var needle = line.substring(prefix.length).trim();
+        if (needle.isNotEmpty && !needle.startsWith('#')) needle = '#$needle';
+        filters.add((t, _) => t.tags.any((tag) => tag.toLowerCase() == needle));
       } else if (line.startsWith('sort by ')) {
         final key = line.substring('sort by '.length).trim();
         for (final k in key.split(',')) {

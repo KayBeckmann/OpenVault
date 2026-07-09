@@ -80,6 +80,36 @@ void main() {
     });
   });
 
+  group('TaskQuery — extended filters', () {
+    test('priority is high', () {
+      final r = TaskQuery.parse('priority is high').run(tasks);
+      expect(r.single.tasks.map((t) => t.description), ['A']);
+    });
+
+    test('tags include (plural) with and without #', () {
+      final tagged = [
+        _t('a.md', 0, tags: {'#task', '#active'}, desc: 'A'),
+        _t('b.md', 0, tags: {'#task'}, desc: 'B'),
+      ];
+      expect(TaskQuery.parse('tags include #active').run(tagged).single.tasks.map((t) => t.description), ['A']);
+      expect(TaskQuery.parse('tags include active').run(tagged).single.tasks.map((t) => t.description), ['A']);
+      // singular form still works
+      expect(TaskQuery.parse('tag includes #active').run(tagged).single.tasks.map((t) => t.description), ['A']);
+    });
+
+    test('due on today (relative date, anchored via now)', () {
+      final now = DateTime(2026, 7, 13, 10);
+      final r = TaskQuery.parse('due on today').run(tasks, now: now);
+      expect(r.single.tasks.map((t) => t.description), ['A']); // A is due 2026-07-13
+    });
+
+    test('due before today = overdue', () {
+      final now = DateTime(2026, 7, 15);
+      final r = TaskQuery.parse('not done\ndue before today').run(tasks, now: now);
+      expect(r.single.tasks.map((t) => t.description), ['A']);
+    });
+  });
+
   group('TaskWriter', () {
     test('complete adds ✅ done date, preserves signifiers', () {
       const c = '- [ ] #task A ⏫ 📅 2026-07-13';
