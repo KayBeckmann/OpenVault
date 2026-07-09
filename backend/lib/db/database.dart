@@ -78,12 +78,18 @@ void _migrate(Database d) {
     d.execute('ALTER TABLE vault_settings ADD COLUMN auto_push_on_close INTEGER NOT NULL DEFAULT 0');
   } catch (_) {}
 
+  // Migration: add template_folders (JSON map: template name -> target folder)
+  try {
+    d.execute("ALTER TABLE vault_settings ADD COLUMN template_folders TEXT NOT NULL DEFAULT '{}'");
+  } catch (_) {}
+
   d.execute('''
     CREATE TABLE IF NOT EXISTS vault_settings (
       vault_id TEXT PRIMARY KEY REFERENCES vaults(id) ON DELETE CASCADE,
       template_folder TEXT NOT NULL DEFAULT '_templates',
       default_note_folder TEXT NOT NULL DEFAULT '',
-      auto_push_on_close INTEGER NOT NULL DEFAULT 0
+      auto_push_on_close INTEGER NOT NULL DEFAULT 0,
+      template_folders TEXT NOT NULL DEFAULT '{}'
     )
   ''');
 

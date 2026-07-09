@@ -26,15 +26,19 @@ Router settingsRouter() {
     final templateFolder = body['templateFolder'] as String? ?? '_templates';
     final defaultNoteFolder = body['defaultNoteFolder'] as String? ?? '';
     final autoPushOnClose = (body['autoPushOnClose'] as bool?) == true ? 1 : 0;
+    // template name -> target folder; empty/absent falls back to default folder
+    final rawMap = body['templateFolders'];
+    final templateFolders = jsonEncode(rawMap is Map ? rawMap : <String, dynamic>{});
 
     db.execute('''
-      INSERT INTO vault_settings (vault_id, template_folder, default_note_folder, auto_push_on_close)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO vault_settings (vault_id, template_folder, default_note_folder, auto_push_on_close, template_folders)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(vault_id) DO UPDATE SET
         template_folder = excluded.template_folder,
         default_note_folder = excluded.default_note_folder,
-        auto_push_on_close = excluded.auto_push_on_close
-    ''', [vaultId, templateFolder, defaultNoteFolder, autoPushOnClose]);
+        auto_push_on_close = excluded.auto_push_on_close,
+        template_folders = excluded.template_folders
+    ''', [vaultId, templateFolder, defaultNoteFolder, autoPushOnClose, templateFolders]);
 
     return _json(_getOrCreate(vaultId), 200);
   });
@@ -56,12 +60,24 @@ Map<String, dynamic> _getOrCreate(String vaultId) {
     [vaultId],
   );
   if (rows.isEmpty) {
-    return {'templateFolder': '_templates', 'defaultNoteFolder': '', 'autoPushOnClose': false};
+    return {
+      'templateFolder': '_templates',
+      'defaultNoteFolder': '',
+      'autoPushOnClose': false,
+      'templateFolders': <String, dynamic>{},
+    };
+  }
+  Map<String, dynamic> folders;
+  try {
+    folders = jsonDecode((rows.first['template_folders'] as String?) ?? '{}') as Map<String, dynamic>;
+  } catch (_) {
+    folders = <String, dynamic>{};
   }
   return {
     'templateFolder': rows.first['template_folder'],
     'defaultNoteFolder': rows.first['default_note_folder'],
     'autoPushOnClose': (rows.first['auto_push_on_close'] as int?) == 1,
+    'templateFolders': folders,
   };
 }
 

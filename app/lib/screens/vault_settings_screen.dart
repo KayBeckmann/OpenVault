@@ -20,6 +20,9 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
   bool _autoPushOnClose = false;
   late TextEditingController _templateFolderCtrl;
   late TextEditingController _defaultNoteFolderCtrl;
+  // Per-template target folder overrides (template name → controller).
+  final Map<String, TextEditingController> _tplFolderCtrls = {};
+  List<String> _templateNames = [];
 
   @override
   void initState() {
@@ -33,6 +36,9 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
   void dispose() {
     _templateFolderCtrl.dispose();
     _defaultNoteFolderCtrl.dispose();
+    for (final c in _tplFolderCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -40,8 +46,10 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final result = await ApiClient().get('/api/settings/${widget.vaultId}');
-      _templateFolderCtrl.text = result['templateFolder'] as String? ?? '_templates';
+      final tplFolder = result['templateFolder'] as String? ?? '_templates';
+      _templateFolderCtrl.text = tplFolder;
       _defaultNoteFolderCtrl.text = result['defaultNoteFolder'] as String? ?? '';
+      await _loadTemplates(tplFolder, _parseMap(result['templateFolders']));
       setState(() { _autoPushOnClose = result['autoPushOnClose'] as bool? ?? false; });
     } on ApiException catch (e) {
       setState(() { _error = e.message; });
@@ -50,13 +58,56 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
     }
   }
 
+  Map<String, String> _parseMap(dynamic raw) {
+    if (raw is Map) {
+      final out = <String, String>{};
+      raw.forEach((k, v) { if (v != null) out[k.toString()] = v.toString(); });
+      return out;
+    }
+    return {};
+  }
+
+  Future<void> _loadTemplates(String folder, Map<String, String> overrides) async {
+    try {
+      final tree = await ApiClient().get('/api/files/${widget.vaultId}/tree');
+      final names = <String>[];
+      void collect(List nodes) {
+        for (final n in nodes) {
+          final path = n['path'] as String? ?? '';
+          final type = n['type'] as String? ?? '';
+          if (type == 'folder') {
+            collect(n['children'] as List? ?? []);
+          } else if (type == 'file' && path.startsWith('$folder/') && path.endsWith('.md')) {
+            names.add(path.split('/').last.replaceAll('.md', ''));
+          }
+        }
+      }
+      collect(tree['children'] as List? ?? []);
+      names.sort();
+      for (final c in _tplFolderCtrls.values) {
+        c.dispose();
+      }
+      _tplFolderCtrls.clear();
+      for (final name in names) {
+        _tplFolderCtrls[name] = TextEditingController(text: overrides[name] ?? '');
+      }
+      _templateNames = names;
+    } catch (_) {}
+  }
+
   Future<void> _save() async {
     setState(() { _saving = true; _error = null; });
     try {
+      final tplFolders = <String, String>{};
+      _tplFolderCtrls.forEach((name, ctrl) {
+        final v = ctrl.text.trim();
+        if (v.isNotEmpty) tplFolders[name] = v;
+      });
       await ApiClient().put('/api/settings/${widget.vaultId}', {
         'templateFolder': _templateFolderCtrl.text.trim(),
         'defaultNoteFolder': _defaultNoteFolderCtrl.text.trim(),
         'autoPushOnClose': _autoPushOnClose,
+        'templateFolders': tplFolders,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,6 +177,31 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
                         prefixIcon: const Icon(Icons.create_new_folder_outlined, size: 18, color: AppColors.outline),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    _SectionHeader('Ordner je Vorlage'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Leer = Standard-Ordner. Sonst landet eine mit dieser Vorlage erstellte Notiz hier — außer du drückst „+" direkt in einem Ordner.',
+                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.outline, height: 1.4),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_templateNames.isEmpty)
+                      Text('Keine Vorlagen im Vorlagen-Ordner gefunden.',
+                          style: GoogleFonts.inter(fontSize: 12, color: AppColors.outline))
+                    else
+                      ..._templateNames.map((name) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextFormField(
+                              controller: _tplFolderCtrls[name],
+                              decoration: InputDecoration(
+                                labelText: name,
+                                hintText: _defaultNoteFolderCtrl.text.trim().isEmpty
+                                    ? 'Standard (Vault-Wurzel)'
+                                    : 'Standard (${_defaultNoteFolderCtrl.text.trim()})',
+                                prefixIcon: const Icon(Icons.folder_outlined, size: 18, color: AppColors.outline),
+                              ),
+                            ),
+                          )),
                     const SizedBox(height: 24),
                     _SectionHeader('Beim Schließen'),
                     const SizedBox(height: 8),

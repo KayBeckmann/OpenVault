@@ -54,6 +54,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
   bool _treeDefaultExpanded = true;
   String _defaultNoteFolder = '';
   String _templateFolder = '_templates';
+  Map<String, String> _templateFolders = {};
   bool _autoPushOnClose = false;
 
   // Tasks add-on: vault-wide index for ```tasks blocks (gated on the toggle).
@@ -178,6 +179,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
       if (mounted) setState(() {
         _defaultNoteFolder = vault['defaultNoteFolder'] as String? ?? '';
         _templateFolder = vault['templateFolder'] as String? ?? '_templates';
+        _templateFolders = _parseTemplateFolders(vault['templateFolders']);
       });
       return;
     }
@@ -187,6 +189,7 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
         _defaultNoteFolder = s['defaultNoteFolder'] as String? ?? '';
         _templateFolder = s['templateFolder'] as String? ?? '_templates';
         _autoPushOnClose = s['autoPushOnClose'] as bool? ?? false;
+        _templateFolders = _parseTemplateFolders(s['templateFolders']);
       });
     } catch (_) {}
   }
@@ -236,14 +239,28 @@ class _FileBrowserScreenState extends State<FileBrowserScreen> {
     }
   }
 
+  Map<String, String> _parseTemplateFolders(dynamic raw) {
+    if (raw is Map) {
+      final out = <String, String>{};
+      raw.forEach((k, v) {
+        if (v != null && v.toString().trim().isNotEmpty) {
+          out[k.toString()] = v.toString().trim();
+        }
+      });
+      return out;
+    }
+    return {};
+  }
+
   Future<void> _createFile(String parentPath) async {
-    final effectiveParent = parentPath.isEmpty ? _defaultNoteFolder : parentPath;
     final result = await showDialog<({String path, String content})>(
       context: context,
       builder: (ctx) => _NewFileDialog(
         vaultId: widget.vaultId,
         localPath: widget.localPath,
-        effectiveParent: effectiveParent,
+        explicitFolder: parentPath.isEmpty ? null : parentPath,
+        defaultNoteFolder: _defaultNoteFolder,
+        templateFolders: _templateFolders,
         templateFolder: _templateFolder,
       ),
     );
@@ -1532,13 +1549,20 @@ class _NewFileDialog extends StatefulWidget {
   const _NewFileDialog({
     this.vaultId,
     this.localPath,
-    required this.effectiveParent,
+    required this.explicitFolder,
+    required this.defaultNoteFolder,
+    required this.templateFolders,
     required this.templateFolder,
   });
 
   final String? vaultId;
   final String? localPath;
-  final String effectiveParent;
+  /// Non-null when "+" was pressed on a specific folder → always wins.
+  final String? explicitFolder;
+  /// Fallback target folder when no template-specific folder applies.
+  final String defaultNoteFolder;
+  /// Template name → target folder overrides.
+  final Map<String, String> templateFolders;
   final String templateFolder;
 
   @override
@@ -1599,12 +1623,23 @@ class _NewFileDialogState extends State<_NewFileDialog> {
     }
   }
 
+  /// Target folder for the note: an explicit folder ("+" on a folder) always
+  /// wins; otherwise the selected template's override, else the default folder.
+  String get _targetFolder {
+    if (widget.explicitFolder != null) return widget.explicitFolder!;
+    final name = _selected?.name;
+    if (name != null) {
+      final override = widget.templateFolders[name];
+      if (override != null && override.trim().isNotEmpty) return override.trim();
+    }
+    return widget.defaultNoteFolder;
+  }
+
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
-    final filePath = widget.effectiveParent.isEmpty
-        ? name
-        : '${widget.effectiveParent}/$name';
+    final folder = _targetFolder;
+    final filePath = folder.isEmpty ? name : '$folder/$name';
 
     String content = '';
     if (_selected != null) {
@@ -1661,9 +1696,9 @@ class _NewFileDialogState extends State<_NewFileDialog> {
                     onSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
                       labelText: 'Dateiname',
-                      helperText: widget.effectiveParent.isEmpty
+                      helperText: _targetFolder.isEmpty
                           ? 'Wird im Vault-Wurzelverzeichnis gespeichert'
-                          : 'Ordner: ${widget.effectiveParent}/',
+                          : 'Ordner: $_targetFolder/',
                       helperStyle: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppColors.outline),
                     ),
                   ),
